@@ -15,7 +15,7 @@ const label = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Усадьбы", template: "%s — Усадьбы" },
+  title: { default: "Усадебки", template: "%s — Усадебки" },
   description: "Каталог русских усадеб: реестр, история, состояние и источники.",
 };
 

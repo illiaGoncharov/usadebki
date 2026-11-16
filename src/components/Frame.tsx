@@ -17,7 +17,7 @@ export function Frame({
   return (
     <div className="shell">
       <div className="shell__head">
-        <Link href="/">Усадьбы</Link>
+        <Link href="/">Усадебки</Link>
       </div>
       <div className="shell__head shell__crumb">{crumb}</div>
       <div className="shell__head shell__head-right">

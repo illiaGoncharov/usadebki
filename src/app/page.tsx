@@ -49,7 +49,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   return (
     <div className="shell shell--catalog">
       <div className="shell__head">
-        <Link href="/">Усадьбы</Link>
+        <Link href="/">Усадебки</Link>
       </div>
       <div className="shell__head shell__crumb">
         <span>Отбор</span>
