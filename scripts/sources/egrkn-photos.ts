@@ -12,7 +12,7 @@ export type EgrknPassportData = {
   architect?: string;
   protectionStatus?: string;
   address?: string;
-  mainPhoto?: EgrknPhoto;
+  mainPhoto?: EgrknPhoto | null;
   additionalPhotos?: EgrknPhoto[];
 };
 
