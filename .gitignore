@@ -36,6 +36,7 @@ yarn-error.log*
 
 # выгрузка ЕГРОКН и прочие локальные данные
 /data/
+/docs/
 
 # vercel
 .vercel
