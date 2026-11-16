@@ -10,6 +10,9 @@
     "db:up": "docker compose up -d",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file=.env ./node_modules/drizzle-kit/bin.cjs migrate",
+    "db:dump": "bash scripts/db-dump-local.sh",
+    "db:push-neon": "node --env-file=.env --import tsx scripts/db-push-neon.ts",
+    "db:sync-neon": "npm run db:dump && npm run db:push-neon",
     "import:egrkn": "node --env-file=.env --import tsx scripts/import-egrkn.ts",
     "enrich:mo": "node --env-file=.env --import tsx scripts/enrich-wikidata.ts"
   },
