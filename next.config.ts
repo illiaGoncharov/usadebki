@@ -1,9 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Каталог читает живую базу. Новый кэш Next запекал бы страницы без Postgres.
 };
 
 export default nextConfig;

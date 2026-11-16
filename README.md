@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Усадьбы
 
-## Getting Started
+Светлый каталог русских усадеб: данные ЕГРОКН, подсказки из Викиданных и Википедии, лента, карта, карточки с источниками.
 
-First, run the development server:
+## Быстрый старт
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env
+# Заполните CARTO_KEY: https://carto.com/basemaps/apikey (бесплатно для личного проекта)
+
+npm install
+npm run db:up
+npm run db:migrate
+
+# Импорт и обогащение — по желанию, см. package.json (import:egrkn, enrich:mo)
+
+npm run dev -- --port 3010
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Откройте [http://localhost:3010](http://localhost:3010).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Postgres в Docker слушает порт **5434** (см. `docker-compose.yml`). Файлы выгрузки ЕГРОКН и локальная БД в `data/` в репозиторий не входят — их нужно скачать и импортировать отдельно (`npm run import:egrkn`).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Что внутри
 
-## Learn More
+- Next.js, Postgres, Drizzle
+- Импорт усадеб из открытой выгрузки ЕГРОКН
+- Фото и краткие тексты из Commons / Wikidata / русской Википедии (с атрибуцией)
+- Правки с источником и простая админка
 
-To learn more about Next.js, take a look at the following resources:
+## Лицензии и данные
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Сведения реестра — Минкультуры России, ЕГРОКН. Тексты и снимки из Википедии и Commons — по их лицензиям на страницах файлов и статей.
