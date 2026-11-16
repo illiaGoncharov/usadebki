@@ -71,33 +71,37 @@ export function EstateReel({
         {rows.length === 0 ? (
           <p className="reel-empty">{empty}</p>
         ) : (
-          <div className="reel">
-            {rows.map((row) => (
-              <a
-                key={row.slug}
-                data-slug={row.slug}
-                className="reel-slide"
-                href={`/estates/${row.slug}`}
-                onClick={() => sessionStorage.setItem(MEMORY, row.slug)}
-              >
-                {row.photoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={cardPhoto(row.photoUrl)} alt="" />
-                ) : (
-                  <span className="reel-slide__empty">снимка пока нет</span>
-                )}
-                <span className="reel-slide__caption">
-                  <span className="kicker">{row.regionName}</span>
-                  <span className="reel-slide__name">{row.name}</span>
-                  <span className="reel-slide__meta">открыть карточку</span>
-                </span>
-              </a>
-            ))}
-            <div className="reel-pager">
-              {filters.page > 1 ? <a href={catalogHref({ ...filters, page: filters.page - 1 })}>Назад</a> : null}
-              {hasMore ? <a href={catalogHref({ ...filters, page: filters.page + 1 })}>Дальше</a> : null}
+          <>
+            <div className="reel">
+              {rows.map((row) => (
+                <a
+                  key={row.slug}
+                  data-slug={row.slug}
+                  className="reel-slide"
+                  href={`/estates/${row.slug}`}
+                  onClick={() => sessionStorage.setItem(MEMORY, row.slug)}
+                >
+                  {row.photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={cardPhoto(row.photoUrl)} alt="" />
+                  ) : (
+                    <span className="reel-slide__empty">снимка пока нет</span>
+                  )}
+                  <span className="reel-slide__caption">
+                    <span className="kicker">{row.regionName}</span>
+                    <span className="reel-slide__name">{row.name}</span>
+                    <span className="reel-slide__meta">открыть карточку</span>
+                  </span>
+                </a>
+              ))}
             </div>
-          </div>
+            {filters.page > 1 || hasMore ? (
+              <nav className="reel-pager" aria-label="Страницы ленты">
+                {filters.page > 1 ? <a href={catalogHref({ ...filters, page: filters.page - 1 })}>Назад</a> : null}
+                {hasMore ? <a href={catalogHref({ ...filters, page: filters.page + 1 })}>Дальше</a> : null}
+              </nav>
+            ) : null}
+          </>
         )}
       </div>
       <aside className="reel-aside">

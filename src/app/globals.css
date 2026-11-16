@@ -602,8 +602,11 @@ textarea.field { min-height: 6.5rem; resize: vertical; }
 
 .reel-pager {
   display: flex;
+  flex-shrink: 0;
   gap: 1.2rem;
-  padding: 1rem 0.95rem 1.4rem;
+  padding: 0.85rem 0.95rem;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
 }
 
 .reel-empty { padding: 1rem 0.95rem; }
