@@ -14,11 +14,11 @@
  * 
  * Поддержка всех регионов + rate limiting.
  */
-import { and, eq, isNull, isNotNull, notExists } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, notExists, or } from "drizzle-orm";
 import { db, sql as pg } from "../src/db";
 import { estatePeople, estates, estateParts, people, photos, sources } from "../src/db/schema";
 import { photoKind, photoRank } from "../src/lib/photo";
-import { stylesFromText } from "../src/lib/reference";
+import { stylesFromText, wikiStyleIds } from "../src/lib/reference";
 import { extractEgrknPassportData, generateReferenceText } from "./sources/egrkn-photos";
 
 const USER_AGENT = "Usadebki/0.1 (local estate catalog; research)";
@@ -86,10 +86,10 @@ async function main() {
     // await enrichFromWikivoyage(rows, region.name);
 
     // 3. Обогащение из ЕГРОКН raw_json
-    await enrichFromEgrkn(rows);
+    await enrichFromEgrkn(region.id);
 
-    // 4. Fallback на фото частей ансамбля
-    await enrichFromEnsembleParts();
+    // 4. Дополнительные тексты из sitelinks (если есть QID, но нет статьи)
+    await fillFromSitelinks(region.id);
 
     await sleep(500); // Пауза между регионами
   }
@@ -100,8 +100,14 @@ async function main() {
   console.log(`Обогащено текстами: ${totalWithText}`);
 
   // Финальные этапы для всех регионов
+  console.log("\n--- Fallback: фото частей ансамблей ---");
+  await enrichFromEnsembleParts();
+
   console.log("\n--- Дополнительные фото из категорий Commons ---");
   await fillMorePhotos();
+
+  console.log("\n--- Стили из Wikidata ---");
+  await fillStyles(regionFilter);
 
   console.log("\n--- Извлечение стилей из текстов ---");
   await fillStylesFromText();
@@ -177,9 +183,15 @@ async function enrichFromWikidata(rows: Array<typeof estates.$inferSelect>) {
 /**
  * Обогащение из raw_json ЕГРОКН: главное фото и генерация справочного текста.
  */
-async function enrichFromEgrkn(rows: Array<typeof estates.$inferSelect>) {
+async function enrichFromEgrkn(regionId: string) {
   let photosAdded = 0;
   let textsAdded = 0;
+
+  // Перечитываем данные из БД, чтобы не затереть только что добавленные Wikipedia-тексты
+  const rows = await db
+    .select()
+    .from(estates)
+    .where(eq(estates.regionId, regionId));
 
   for (const estate of rows) {
     if (!estate.rawJson) continue;
@@ -204,15 +216,15 @@ async function enrichFromEgrkn(rows: Array<typeof estates.$inferSelect>) {
           isPrimary: true,
           sourceUrl: `https://opendata.mkrf.ru/opendata/7705851331-egrkn/`,
           origin: "egrkn",
-        });
+        }).onConflictDoNothing({ target: [photos.estateId, photos.url] });
         photosAdded += 1;
       } catch {
-        // Игнорируем дубликаты
+        // Игнорируем другие ошибки
       }
     }
 
-    // Генерируем справочный текст, если нет summary
-    if (!estate.summary) {
+    // Генерируем справочный текст только если нет summary из других источников
+    if (!estate.summary || estate.summarySource === null) {
       const refText = generateReferenceText(passportData);
       if (refText) {
         await db
@@ -222,7 +234,10 @@ async function enrichFromEgrkn(rows: Array<typeof estates.$inferSelect>) {
             summarySource: "egrkn-passport",
             updatedAt: new Date(),
           })
-          .where(eq(estates.id, estate.id));
+          .where(and(
+            eq(estates.id, estate.id),
+            or(isNull(estates.summary), isNull(estates.summarySource))
+          ));
         textsAdded += 1;
       }
     }
@@ -417,6 +432,144 @@ async function fillMorePhotos() {
   console.log(`  Дополнительных фото из категорий: ${saved}`);
 }
 
+async function fillFromSitelinks(regionId: string | null) {
+  const rows = await db
+    .select({
+      id: estates.id,
+      qid: estates.wikidataQid,
+      summary: estates.summary,
+      summarySource: estates.summarySource,
+    })
+    .from(estates)
+    .where(
+      and(
+        regionId ? eq(estates.regionId, regionId) : undefined,
+        isNotNull(estates.wikidataQid),
+        or(isNull(estates.summary), eq(estates.summarySource, "wikipedia"))
+      )
+    );
+
+  const todo = rows.filter((row) => row.qid && !row.summary);
+  if (todo.length === 0) return;
+
+  let filled = 0;
+  for (let offset = 0; offset < todo.length; offset += 40) {
+    const batch = todo.slice(offset, offset + 40);
+    const sitelinkUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${batch.map((row) => row.qid).join("|")}&props=sitelinks&sitefilter=ruwiki&format=json`;
+    const response = await fetchRetry(sitelinkUrl, { headers: { "User-Agent": USER_AGENT } });
+    if (!response || !response.ok) {
+      console.warn(`  Ссылки на статьи не отдались: ${response?.status ?? "нет ответа"}`);
+      continue;
+    }
+    const json = (await response.json()) as {
+      entities?: Record<string, { sitelinks?: { ruwiki?: { title?: string } } }>;
+    };
+    for (const row of batch) {
+      const title = row.qid ? json.entities?.[row.qid]?.sitelinks?.ruwiki?.title : undefined;
+      if (!title) continue;
+      const summary = await wikiSummaryTitle(title);
+      if (!summary) continue;
+      await db
+        .update(estates)
+        .set({
+          summary: summary.extract,
+          summarySource: "wikipedia",
+          wikipediaTitle: summary.title,
+          wikipediaUrl: summary.url,
+          updatedAt: new Date(),
+        })
+        .where(eq(estates.id, row.id));
+      filled += 1;
+      await sleep(250);
+    }
+    if ((offset + 40) % 200 === 0 || offset + 40 >= todo.length) {
+      console.log(`    ${Math.min(offset + 40, todo.length)} / ${todo.length}, текстов ${filled}`);
+    }
+  }
+  if (filled > 0) {
+    console.log(`  Вступлений Википедии через sitelinks: ${filled}`);
+  }
+}
+
+async function fillStyles(regionId: string | null) {
+  const rows = await db
+    .select({ id: estates.id, reg: estates.egrknRegNumber, qid: estates.wikidataQid })
+    .from(estates)
+    .where(regionId ? eq(estates.regionId, regionId) : undefined);
+
+  const byReg = new Map(rows.map((row) => [row.reg, row]));
+  const found = new Map<string, { qid: string; styles: string[]; labels: string[] }>();
+
+  console.log(`  Запрос стилей из Wikidata...`);
+  for (const row of await askAllStyles()) {
+    const reg = row.egrkn?.value;
+    const item = row.item?.value;
+    const style = row.style?.value;
+    if (!reg || !item || !style || !byReg.has(reg)) continue;
+    const hit = found.get(reg) ?? { qid: qidOf(item), styles: [], labels: [] };
+    const qid = qidOf(style);
+    if (!hit.styles.includes(qid)) hit.styles.push(qid);
+    const label = row.styleLabel?.value;
+    if (label && !label.startsWith("Q") && !hit.labels.includes(label)) hit.labels.push(label);
+    found.set(reg, hit);
+  }
+
+  console.log(`  Wikidata знает стиль у ${found.size} усадеб`);
+  let saved = 0;
+
+  for (const [reg, hit] of found) {
+    const estate = byReg.get(reg);
+    const styleIds = wikiStyleIds(hit.styles, hit.labels);
+    const styleId = styleIds[0];
+    if (!estate || !styleId) continue;
+
+    await db
+      .update(estates)
+      .set({
+        wikiStyle: styleId,
+        wikiStyles: styleIds,
+        ...(estate.qid ? {} : { wikidataQid: hit.qid }),
+        updatedAt: new Date(),
+      })
+      .where(eq(estates.id, estate.id));
+    saved += 1;
+  }
+
+  if (saved > 0) {
+    console.log(`  Стилей из Wikidata записано: ${saved}`);
+  }
+}
+
+async function askAllStyles() {
+  const query = `
+    SELECT ?item ?egrkn ?style ?styleLabel WHERE {
+      ?item wdt:P5381 ?egrkn ;
+            wdt:P149 ?style .
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "ru,en". }
+    }
+  `;
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    response = await fetch("https://query.wikidata.org/sparql", {
+      method: "POST",
+      headers: {
+        Accept: "application/sparql-results+json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": USER_AGENT,
+      },
+      body: new URLSearchParams({ query }),
+    });
+    if (response.status !== 429 && response.status !== 502 && response.status !== 503) break;
+    const retryAfter = Number(response.headers.get("retry-after"));
+    await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 8000 * (attempt + 1));
+  }
+  if (!response || !response.ok) throw new Error(`Wikidata ${response?.status ?? "нет ответа"}`);
+  const json = (await response.json()) as {
+    results?: { bindings?: Record<string, { value?: string }>[] };
+  };
+  return json.results?.bindings ?? [];
+}
+
 async function fillStylesFromText() {
   const rows = await db
     .select({ id: estates.id, summary: estates.summary, wikiStyle: estates.wikiStyle })
@@ -435,7 +588,9 @@ async function fillStylesFromText() {
       .where(eq(estates.id, row.id));
     saved += 1;
   }
-  console.log(`  Стилей извлечено из текстов: ${saved}`);
+  if (saved > 0) {
+    console.log(`  Стилей извлечено из текстов: ${saved}`);
+  }
 }
 
 // ===== Вспомогательные функции из оригинального скрипта =====
@@ -711,7 +866,7 @@ async function savePhotos(estateId: string, images: string[], origin: string) {
       isPrimary: !hasPrimary,
       sourceUrl: file.page,
       origin,
-    });
+    }).onConflictDoNothing({ target: [photos.estateId, photos.url] });
     known.add(file.display);
     hasPrimary = true;
     added = true;

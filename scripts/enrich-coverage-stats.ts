@@ -59,13 +59,12 @@ async function main() {
     select 
       e.region_id,
       e.region_name,
-      count(*)::int as total,
-      count(distinct p.estate_id)::int as with_photo,
-      count(case when e.summary is not null then 1 end)::int as with_text
+      count(distinct e.id)::int as total,
+      count(distinct case when exists(select 1 from photos p where p.estate_id = e.id) then e.id end)::int as with_photo,
+      count(distinct case when e.summary is not null then e.id end)::int as with_text
     from estates e
-    left join photos p on p.estate_id = e.id
     group by e.region_id, e.region_name
-    order by count(*) desc
+    order by count(distinct e.id) desc
     limit 20
   `);
 
