@@ -129,14 +129,7 @@ function Glance({ row }: { row: CatalogRow }) {
       <p className="kicker">{row.regionName}</p>
       <p className="reel-aside__name">{row.name}</p>
       <p className="muted">
-        {[
-          row.objectType === "Ансамбль" ? "ансамбль" : null,
-          row.createdDateText,
-          shortKind(row.objectType),
-          shortRank(row.category),
-        ]
-          .filter(Boolean)
-          .join(" · ")}
+        {[row.createdDateText, shortKind(row.objectType), shortRank(row.category)].filter(Boolean).join(" · ")}
       </p>
       {row.styleIds?.length ? <p>{row.styleIds.map((id) => styleLabel(id)).join(", ")}</p> : null}
       <p>
