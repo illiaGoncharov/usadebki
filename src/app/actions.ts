@@ -107,7 +107,27 @@ export async function submitInquiry(_prev: FormState, formData: FormData): Promi
 }
 
 export async function submitContribution(_prev: FormState, formData: FormData): Promise<FormState> {
-  const slug = text(formData.get("slug"));
+  try {
+    return await submitContributionImpl(formData);
+  } catch (error) {
+    console.error("[submitContribution]", error);
+    const detail = error instanceof Error ? error.message : "unknown";
+    return {
+      error:
+        process.env.NODE_ENV === "development"
+          ? `Не удалось отправить: ${detail}`
+          : "Не удалось отправить. Попробуйте ещё раз чуть позже.",
+    };
+  }
+}
+
+async function submitContributionImpl(formData: FormData): Promise<FormState> {
+  const slugProbe = text(formData.get("slug"));
+  if (process.env.DEBUG_CONTRIBUTE_PROBE === "1") {
+    return { error: null, sent: true, estateSlug: slugProbe || undefined };
+  }
+
+  const slug = slugProbe;
   const predicate = text(formData.get("predicate"));
   const body = text(formData.get("text"));
   const authorName = text(formData.get("authorName"));
