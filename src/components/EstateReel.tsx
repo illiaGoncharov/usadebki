@@ -58,10 +58,18 @@ export function EstateReel({
             <Keep filters={filters} except="q" />
             <SearchBox filters={filters} />
           </form>
-          <a className={filters.photo ? "is-active" : ""} href={catalogHref({ ...filters, photo: !filters.photo, page: undefined })}>
+          <a
+            className={filters.photo ? "reel-quick__toggle is-active" : "reel-quick__toggle"}
+            href={catalogHref({ ...filters, photo: !filters.photo, page: undefined })}
+            aria-pressed={filters.photo}
+          >
             с фото
           </a>
-          <a className={filters.text ? "is-active" : ""} href={catalogHref({ ...filters, text: !filters.text, page: undefined })}>
+          <a
+            className={filters.text ? "reel-quick__toggle is-active" : "reel-quick__toggle"}
+            href={catalogHref({ ...filters, text: !filters.text, page: undefined })}
+            aria-pressed={filters.text}
+          >
             с историей
           </a>
           <span className="reel-quick__count">

@@ -24,7 +24,10 @@ export function CatalogFilters({
   const byName = [...regions].sort((a, b) => a.regionName.localeCompare(b.regionName, "ru"));
   const gubernias = [...GUBERNIAS].sort((a, b) => a.name.localeCompare(b.name, "ru"));
   const picked = [
+    regions.find((item) => item.regionId === value.region)?.regionName,
     gubernias.find((item) => item.id === value.gubernia)?.name,
+    value.photo ? "с фото" : null,
+    value.text ? "с историей" : null,
     ERAS.find((item) => item.id === value.era)?.label,
     RANKS.find((item) => item.id === value.rank)?.label,
     KINDS.find((item) => item.id === value.kind)?.label,
@@ -52,7 +55,7 @@ export function CatalogFilters({
       {value.text ? <input type="hidden" name="text" value="1" /> : null}
       <div className="filter-toggle">
         <button type="button" className="text-button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
-          {open ? "Скрыть отбор" : "Отбор"}
+          {open ? "Скрыть фильтры" : "Фильтры"}
         </button>
         {!open && picked.length > 0 ? <span>{picked.join(" · ")}</span> : null}
       </div>

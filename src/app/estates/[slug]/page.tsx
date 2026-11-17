@@ -112,7 +112,9 @@ export default async function EstatePage({
             <p>
               <a
                 className="text-link"
-                href={`https://pastvu.com/map/@${estate.lat},${estate.lng},17z`}
+                href={`https://pastvu.com/?g=${estate.lat},${estate.lng}&z=17&t=map`}
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 Как выглядело раньше — PastVu
               </a>

@@ -52,7 +52,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <Link href="/">Усадебки</Link>
       </div>
       <div className="shell__head shell__crumb">
-        <span>Отбор</span>
+        <span>Фильтры</span>
         <span> · {regionName ?? "все"}</span>
       </div>
       <div className="shell__head shell__head-right">
