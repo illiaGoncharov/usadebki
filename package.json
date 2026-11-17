@@ -16,7 +16,9 @@
     "import:egrkn": "node --env-file=.env --import tsx scripts/import-egrkn.ts",
     "enrich:mo": "node --env-file=.env --import tsx scripts/enrich-wikidata.ts",
     "enrich:all": "node --env-file=.env --import tsx scripts/enrich-all-sources.ts",
-    "enrich:stats": "node --env-file=.env --import tsx scripts/enrich-coverage-stats.ts"
+    "enrich:stats": "node --env-file=.env --import tsx scripts/enrich-coverage-stats.ts",
+    "photos:audit": "node --env-file=.env --import tsx scripts/audit-photos.ts",
+    "photos:test": "node --import tsx scripts/test-photo-match.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",

@@ -1,4 +1,4 @@
-export type PhotoKind = "house" | "other" | "place" | "scene";
+export type PhotoKind = "house" | "other" | "place" | "part" | "scene";
 
 // Праздник, каток и случайный кадр района не показываем как усадьбу.
 const SCENE = [
@@ -27,10 +27,8 @@ const HOUSE = [
   "усадьб",
   "садиб",
   "дворец",
-  "флигел",
   "особняк",
   "фасад",
-  "павильон",
   "главный дом",
   "main house",
   "mansion",
@@ -41,11 +39,62 @@ const HOUSE = [
   "estate",
   "usadba",
   "господск",
-  "ворота",
-  "оград",
 ];
 
-const RANK: Record<PhotoKind, number> = { house: 0, other: 1, place: 2, scene: 3 };
+// Главное здание названо прямо. Такие слова перевешивают слова про вспомогательные здания.
+export const MAIN_WORDS = [
+  "главный дом",
+  "главный корпус",
+  "главное здание",
+  "господский дом",
+  "усадебный дом",
+  "барский дом",
+  "main house",
+  "manor house",
+  "mansion",
+  "palace",
+  "дворец",
+  "особняк",
+];
+
+// Вспомогательные здания и сооружения ансамбля. Это не главный дом, их место в конце списка.
+export const PART_WORDS = [
+  "флигел",
+  "конюш",
+  "кладов",
+  "служеб",
+  "хозяйствен",
+  "каретн",
+  "людск",
+  "сарай",
+  "амбар",
+  "ледник",
+  "оранжере",
+  "беседк",
+  "сторожк",
+  "привратн",
+  "ворота",
+  "оград",
+  "баня",
+  "погреб",
+  "ризниц",
+  "церков",
+  "часовн",
+  "колокольн",
+  "усыпальниц",
+  "мавзолей",
+  "павильон",
+  "outbuilding",
+  "stable",
+  "chapel",
+  "church",
+  "bell tower",
+  "orangery",
+  "greenhouse",
+  "gatehouse",
+];
+
+const RANK: Record<PhotoKind, number> = { house: 0, other: 1, place: 2, part: 3, scene: 4 };
 
 export function decodePhotoName(value: string) {
   const raw = value.includes("Special:FilePath/")
@@ -68,6 +117,10 @@ function isPlace(name: string) {
 
 export function photoKind(value: string): PhotoKind {
   const name = decodePhotoName(value).toLowerCase();
+  // Флигель или конюшня не должны выигрывать у главного дома, поэтому проверяем их раньше «дома».
+  if (PART_WORDS.some((word) => name.includes(word)) && !MAIN_WORDS.some((word) => name.includes(word))) {
+    return "part";
+  }
   // Сначала ищем здание: иначе «Estate - panoramio» уходит в сцену и пропадает из ленты.
   if (HOUSE.some((word) => name.includes(word))) return "house";
   if (SCENE.some((word) => name.includes(word))) return "scene";
@@ -128,11 +181,15 @@ begin
   name := replace(url_decode(file), '_', ' ');
   name := translate(name, 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя');
   name := lower(name);
+  if (${PART_WORDS.map((word) => `position(${quotePhotoWord(word)} in name) > 0`).join(" or ")})
+     and not (${MAIN_WORDS.map((word) => `position(${quotePhotoWord(word)} in name) > 0`).join(" or ")}) then
+    return 3;
+  end if;
   if ${HOUSE.map((word) => `position(${quotePhotoWord(word)} in name) > 0`).join(" or ")} then
     return 0;
   end if;
   if ${SCENE.map((word) => `position(${quotePhotoWord(word)} in name) > 0`).join(" or ")} then
-    return 3;
+    return 4;
   end if;
   if name ~ '(^|[^a-z])(park|garden)([^a-z]|$)'
      or name ~ '(^|[^а-яё])(парк|пруд|фонтан|алле|клумб|грот)'

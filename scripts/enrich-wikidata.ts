@@ -215,7 +215,6 @@ async function fillMorePhotos() {
   }
 
   const fresh: { estateId: string; file: NonNullable<ReturnType<typeof commonsFile>>; primary: boolean }[] = [];
-  let looked = 0;
   for (const [reg, bag] of bags) {
     const estate = byReg.get(reg);
     if (!estate) continue;
@@ -227,16 +226,7 @@ async function fillMorePhotos() {
       const file = commonsFile(item);
       return file ? [file.filename] : [];
     });
-    if (names.length < PHOTO_CAP && bag.category) {
-      try {
-        names.push(...(await categoryFiles(bag.category)));
-      } catch (error) {
-        console.warn(`Категория «${bag.category}»:`, error instanceof Error ? error.message : error);
-      }
-      looked += 1;
-      if (looked % 40 === 0) console.log(`  категории ${looked}`);
-      await sleep(200);
-    }
+    // Категории Commons (P373) не берём: они бывают на целый район и приносят чужие снимки.
     const ranked = [...names].filter(isEstatePhoto).sort((a, b) => photoRank(photoKind(a)) - photoRank(photoKind(b)));
     for (const filename of ranked) {
       if (known.size >= PHOTO_CAP) break;
@@ -301,25 +291,6 @@ async function askPhotoClaims() {
   return json.results?.bindings ?? [];
 }
 
-async function categoryFiles(category: string) {
-  const response = await fetchRetry(
-    `https://commons.wikimedia.org/w/api.php?${new URLSearchParams({
-      action: "query",
-      format: "json",
-      list: "categorymembers",
-      cmtitle: `Category:${category}`,
-      cmtype: "file",
-      cmlimit: "24",
-    })}`,
-    { headers: { "User-Agent": USER_AGENT } },
-  );
-  if (!response?.ok) return [];
-  const json = (await response.json()) as { query?: { categorymembers?: { title?: string }[] } };
-  return (json.query?.categorymembers ?? []).flatMap((item) => {
-    const title = item.title?.replace(/^File:/, "").trim();
-    return title ? [title] : [];
-  });
-}
 
 function commonsFromName(filename: string) {
   return {

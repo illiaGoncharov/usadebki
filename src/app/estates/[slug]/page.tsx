@@ -109,7 +109,11 @@ export default async function EstatePage({
           {estate.photos.length === 0 ? (
             <>
               <div className="photo-empty">Фотографии пока нет</div>
-              <p className="caption">Снимок ещё не привязан</p>
+              <p className="caption">
+                {estate.ensemblePhotos && estate.ensemblePhotos.length > 0
+                  ? "Подтверждённого снимка самого объекта пока нет, ниже — фото других частей ансамбля"
+                  : "Подтверждённого снимка пока нет"}
+              </p>
             </>
           ) : (
             <PhotoGallery name={displayName} photos={estate.photos} />

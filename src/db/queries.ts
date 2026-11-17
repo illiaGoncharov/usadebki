@@ -163,7 +163,7 @@ export async function listEstates(options: {
       where estate_id = e.id
         and is_hidden = false
         and is_ensemble_part = false
-      order by photo_kind(url), is_primary desc
+      order by (photo_kind(url) >= 3), is_primary desc, photo_kind(url)
       limit 1
     ) p on true
     left join lateral (
@@ -317,7 +317,7 @@ async function featuredInRegion(regionId: string | null) {
       where estate_id = e.id
         and is_hidden = false
         and is_ensemble_part = false
-      order by photo_kind(url), is_primary desc
+      order by (photo_kind(url) >= 3), is_primary desc, photo_kind(url)
       limit 1
     ) p on true
     where (${regionId}::text is null or e.region_id = ${regionId})
@@ -405,7 +405,11 @@ export async function getEstate(slug: string) {
     ...estate,
     parts: parts.sort((a, b) => a.name.localeCompare(b.name, "ru")),
     photos: photoRows.sort(
-      (a, b) => photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)) || Number(b.isPrimary) - Number(a.isPrimary),
+      // Часть и случайный кадр всегда в конце, затем проверенное главное, затем «дом» перед «прочим».
+      (a, b) =>
+        Number(photoRank(photoKind(a.url)) >= 3) - Number(photoRank(photoKind(b.url)) >= 3) ||
+        Number(b.isPrimary) - Number(a.isPrimary) ||
+        photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)),
     ),
     ensemblePhotos: ensemblePhotoRows.sort(
       (a, b) => photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)),
