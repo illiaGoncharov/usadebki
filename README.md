@@ -79,8 +79,12 @@ npm run dev -- --port 3010
 | `npm run photos:test` | Тесты правил сопоставления фото |
 | `npm run enrich:stats` | Сводная статистика покрытия: % усадеб с фото, с текстом, разбивка по источникам и регионам |
 | `npm run db:dump` | Создание локального дампа базы (`data/usadebki.dump`) |
-| `npm run db:push-neon` | Восстановление дампа в облачную базу Neon (`NEON_DATABASE_URL`) |
-| `npm run db:sync-neon` | Полный цикл: локальный дамп + заливка в Neon |
+| `npm run db:push-neon` | Восстановление дампа в Neon **без** `--clean` (осторожно: повторная заливка не заменяет данные и не чинит схему) |
+| `npm run db:migrate:neon` | Только миграции Drizzle на Neon, данные не трогаем |
+| `npm run db:sync-neon` | Устаревший цикл: `db:dump` + `db:push-neon` — для беты лучше `beta:publish` |
+| `npm run beta:publish` | Обновление **контента** беты: дамп → `pg_restore --clean` в Neon → проверка колонок и HTTP 200 |
+
+**Обновить фото на бете** (без редеплоя кода): после проверки правил локально — `npm run photos:audit -- --apply`, затем `npm run beta:publish`. В шапке карточки только одно подтверждённое фото главного здания; пустая шапка лучше, чем чужой снимок. Если менялся код — отдельно `git push` в ветку Vercel.
 
 ---
 

@@ -6,7 +6,13 @@ import { SearchBox } from "@/components/SearchBox";
 import { catalogHref, type CatalogLink } from "@/lib/catalog-url";
 import { estateDisplayTitle } from "@/lib/estate-display-name";
 import { conditionLabel } from "@/lib/labels";
-import { guberniaByRegion, shortKind, shortRank, styleLabel } from "@/lib/reference";
+import {
+  formatCatalogDistance,
+  guberniaByRegion,
+  shortKind,
+  shortRank,
+  styleLabel,
+} from "@/lib/reference";
 
 const MEMORY = "usadebki-reel";
 
@@ -139,7 +145,9 @@ function Glance({ row }: { row: CatalogRow }) {
       {row.styleIds?.length ? <p>{row.styleIds.map((id) => styleLabel(id)).join(", ")}</p> : null}
       <p>
         {conditionLabel(row.condition)}
-        {row.km != null && row.city ? ` · ${Math.round(row.km)} км от ${row.city}` : ""}
+        {row.km != null && row.city
+          ? ` · ${formatCatalogDistance(row.city, row.km)}`
+          : ""}
       </p>
       {gubernia ? (
         <p>

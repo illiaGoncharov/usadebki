@@ -107,6 +107,11 @@ export function decodePhotoName(value: string) {
   }
 }
 
+/** Ключ файла Commons для схлопывания дублей с разным ?width=. */
+export function photoFileKey(value: string) {
+  return decodePhotoName(value).trim().toLowerCase();
+}
+
 function isPlace(name: string) {
   return (
     /(^|[^a-z])(park|garden)([^a-z]|$)/i.test(name) ||

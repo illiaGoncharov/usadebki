@@ -345,34 +345,53 @@ export function guberniaByRegion(regionId: string | undefined) {
 
 /** Крупные города, от которых считаем прямую, не дорогу. */
 export const AGGLOMERATIONS = [
-  { name: "Москвы", lat: 55.7558, lng: 37.6173 },
-  { name: "Петербурга", lat: 59.9311, lng: 30.3609 },
-  { name: "Новосибирска", lat: 55.0084, lng: 82.9357 },
-  { name: "Екатеринбурга", lat: 56.8389, lng: 60.6057 },
-  { name: "Казани", lat: 55.7961, lng: 49.1064 },
-  { name: "Нижнего Новгорода", lat: 56.3269, lng: 44.0059 },
-  { name: "Челябинска", lat: 55.1644, lng: 61.4368 },
-  { name: "Самары", lat: 53.1959, lng: 50.1002 },
-  { name: "Омска", lat: 54.9885, lng: 73.3242 },
-  { name: "Ростова", lat: 47.2357, lng: 39.7015 },
-  { name: "Уфы", lat: 54.7388, lng: 55.9721 },
-  { name: "Красноярска", lat: 56.0153, lng: 92.8932 },
-  { name: "Воронежа", lat: 51.6608, lng: 39.2003 },
-  { name: "Перми", lat: 58.0105, lng: 56.2502 },
-  { name: "Волгограда", lat: 48.708, lng: 44.5133 },
-  { name: "Краснодара", lat: 45.0355, lng: 38.9753 },
+  { name: "Москвы", cityLabel: "Москва", withinKm: 35, lat: 55.7558, lng: 37.6173 },
+  { name: "Петербурга", cityLabel: "Санкт-Петербург", withinKm: 30, lat: 59.9311, lng: 30.3609 },
+  { name: "Новосибирска", cityLabel: "Новосибирск", withinKm: 20, lat: 55.0084, lng: 82.9357 },
+  { name: "Екатеринбурга", cityLabel: "Екатеринбург", withinKm: 20, lat: 56.8389, lng: 60.6057 },
+  { name: "Казани", cityLabel: "Казань", withinKm: 20, lat: 55.7961, lng: 49.1064 },
+  { name: "Нижнего Новгорода", cityLabel: "Нижний Новгород", withinKm: 20, lat: 56.3269, lng: 44.0059 },
+  { name: "Челябинска", cityLabel: "Челябинск", withinKm: 18, lat: 55.1644, lng: 61.4368 },
+  { name: "Самары", cityLabel: "Самара", withinKm: 18, lat: 53.1959, lng: 50.1002 },
+  { name: "Омска", cityLabel: "Омск", withinKm: 18, lat: 54.9885, lng: 73.3242 },
+  { name: "Ростова", cityLabel: "Ростов-на-Дону", withinKm: 18, lat: 47.2357, lng: 39.7015 },
+  { name: "Уфы", cityLabel: "Уфа", withinKm: 18, lat: 54.7388, lng: 55.9721 },
+  { name: "Красноярска", cityLabel: "Красноярск", withinKm: 18, lat: 56.0153, lng: 92.8932 },
+  { name: "Воронежа", cityLabel: "Воронеж", withinKm: 18, lat: 51.6608, lng: 39.2003 },
+  { name: "Перми", cityLabel: "Пермь", withinKm: 18, lat: 58.0105, lng: 56.2502 },
+  { name: "Волгограда", cityLabel: "Волгоград", withinKm: 18, lat: 48.708, lng: 44.5133 },
+  { name: "Краснодара", cityLabel: "Краснодар", withinKm: 18, lat: 45.0355, lng: 38.9753 },
 ] as const;
 
+export type AgglomerationRef = (typeof AGGLOMERATIONS)[number];
+
+/** Текст для блока «До города» и ленты: внутри агломерации — только название, иначе «N км от …». */
+export function formatAgglomerationDistance(
+  input: { name: string; cityLabel: string; km: number; withinKm: number } | null,
+) {
+  if (!input) return null;
+  if (input.km <= input.withinKm) return input.cityLabel;
+  return `${input.km} км от ${input.name}`;
+}
+
+export function formatCatalogDistance(cityGenitive: string, km: number) {
+  const agg = AGGLOMERATIONS.find((item) => item.name === cityGenitive);
+  const rounded = Math.round(km);
+  if (!agg) return `${rounded} км от ${cityGenitive}`;
+  return formatAgglomerationDistance({ ...agg, km: rounded }) ?? `${rounded} км от ${cityGenitive}`;
+}
+
 export function nearestAgglomeration(lat: number, lng: number) {
-  let best: { name: string; km: number } = {
-    name: AGGLOMERATIONS[0].name,
-    km: Number.POSITIVE_INFINITY,
-  };
+  let best: AgglomerationRef = AGGLOMERATIONS[0];
+  let bestKm = Number.POSITIVE_INFINITY;
   for (const city of AGGLOMERATIONS) {
     const km = haversine(lat, lng, city.lat, city.lng);
-    if (km < best.km) best = { name: city.name, km };
+    if (km < bestKm) {
+      best = city;
+      bestKm = km;
+    }
   }
-  return { name: best.name, km: Math.round(best.km) };
+  return { ...best, km: Math.round(bestKm) };
 }
 
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {

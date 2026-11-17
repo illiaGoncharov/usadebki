@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { PHOTO_KIND_SQL, photoKind, photoRank } from "@/lib/photo";
+import { PHOTO_KIND_SQL, photoFileKey, photoKind, photoRank } from "@/lib/photo";
 import { AGGLOMERATIONS } from "@/lib/reference";
 import { placeFromAddress } from "@/lib/search";
 import { db, sql as pg } from "./index";
@@ -401,16 +401,25 @@ export async function getEstate(slug: string) {
 
   const roleOrder = (role: string) => (role === "last_owner" ? 0 : role === "owner" ? 1 : 2);
 
+  const primaryPhotos = photoRows.filter((row) => row.isPrimary);
+  const dedupedPrimary = new Map<string, (typeof photoRows)[number]>();
+  for (const row of primaryPhotos) {
+    const key = photoFileKey(row.url);
+    const existing = dedupedPrimary.get(key);
+    if (!existing || (!existing.isPrimary && row.isPrimary)) dedupedPrimary.set(key, row);
+  }
+  const galleryPhotos = [...dedupedPrimary.values()]
+    .sort(
+      (a, b) =>
+        photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)) ||
+        a.url.localeCompare(b.url, "ru"),
+    )
+    .slice(0, 1);
+
   return {
     ...estate,
     parts: parts.sort((a, b) => a.name.localeCompare(b.name, "ru")),
-    photos: photoRows.sort(
-      // Часть и случайный кадр всегда в конце, затем проверенное главное, затем «дом» перед «прочим».
-      (a, b) =>
-        Number(photoRank(photoKind(a.url)) >= 3) - Number(photoRank(photoKind(b.url)) >= 3) ||
-        Number(b.isPrimary) - Number(a.isPrimary) ||
-        photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)),
-    ),
+    photos: galleryPhotos,
     ensemblePhotos: ensemblePhotoRows.sort(
       (a, b) => photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)),
     ),

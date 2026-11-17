@@ -34,7 +34,8 @@ export async function fetchNearbyHistoricalPhotos(
   lat: number,
   lng: number,
   radiusKm: number = 0.25,
-  limit: number = 10
+  limit: number = 10,
+  skip: number = 0,
 ): Promise<PastVuPhoto[]> {
   try {
     const params = new URLSearchParams({
@@ -43,6 +44,7 @@ export async function fetchNearbyHistoricalPhotos(
         geo: [lat, lng],
         distance: Math.round(radiusKm * 1000),
         limit: Math.min(limit, 30),
+        skip,
         year: 1800,
         year2: 1990,
         type: "photo",
@@ -100,12 +102,6 @@ export async function fetchNearbyHistoricalPhotos(
         lat: p.geo![0],
         lng: p.geo![1],
       }))
-      .sort((a, b) => {
-        // Сортируем по году (старые первыми)
-        const yearA = a.year || 9999;
-        const yearB = b.year || 9999;
-        return yearA - yearB;
-      })
       .slice(0, limit);
   } catch (error) {
     console.warn("PastVu fetch error:", error instanceof Error ? error.message : error);
@@ -114,8 +110,43 @@ export async function fetchNearbyHistoricalPhotos(
 }
 
 /**
- * Форматирует год или диапазон лет для отображения.
+ * Несколько страниц подряд: API отдаёт максимум 30 за запрос, а у большого ансамбля
+ * первые 30 ближайших снимков часто про один и тот же двор.
  */
+export async function fetchNearbyHistoricalPhotosPaged(
+  lat: number,
+  lng: number,
+  radiusKm: number,
+  pages: number,
+): Promise<PastVuPhoto[]> {
+  const chunks = await Promise.all(
+    Array.from({ length: pages }, (_, i) => fetchNearbyHistoricalPhotos(lat, lng, radiusKm, 30, i * 30)),
+  );
+  const seen = new Set<number>();
+  return chunks.flat().filter((photo) => (seen.has(photo.cid) ? false : (seen.add(photo.cid), true)));
+}
+
+/** Расстояние между точками в метрах (для выбора ближайшего снимка к объекту). */
+export function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const earthM = 6_371_000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return earthM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Самый близкий к координатам объекта кадр из ответа PastVu. */
+export function pickClosestPastVuPhoto(photos: PastVuPhoto[], lat: number, lng: number) {
+  if (photos.length === 0) return null;
+  return [...photos].sort(
+    (a, b) => distanceMeters(lat, lng, a.lat, a.lng) - distanceMeters(lat, lng, b.lat, b.lng),
+  )[0]!;
+}
+
+/** Форматирует год или диапазон лет для отображения. */
 export function formatPastVuYear(year: number | null, year2: number | null): string {
   if (!year) return "дата не указана";
   if (year2 && year2 !== year) return `${year}–${year2}`;

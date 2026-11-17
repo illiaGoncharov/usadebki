@@ -69,8 +69,8 @@ export function PastVuLightbox({ photos, estateName }: { photos: PastVuGridItem[
               className="pastvu-thumb"
             />
             <div className="pastvu-caption">
+              {photo.title ? <div className="pastvu-title">{photo.title}</div> : null}
               <div className="pastvu-year">{formatPastVuYear(photo.year, photo.year2)}</div>
-              {photo.author ? <div className="pastvu-author">{photo.author}</div> : null}
             </div>
           </button>
         ))}
@@ -104,7 +104,6 @@ export function PastVuLightbox({ photos, estateName }: { photos: PastVuGridItem[
               <a className="text-link" href={active.link} target="_blank" rel="noopener noreferrer">
                 Открыть на PastVu
               </a>
-              <span className="muted"> · некоммерческое использование, источник PastVu</span>
             </p>
           </div>
         </div>
