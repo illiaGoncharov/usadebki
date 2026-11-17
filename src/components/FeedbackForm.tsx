@@ -32,7 +32,7 @@ export function FeedbackForm({
   }
 
   return (
-    <form action={action} className="prose" encType="multipart/form-data">
+    <form action={action} className="prose">
       <input type="hidden" name="topic" value={topic} />
       {estateSlug ? <input type="hidden" name="estateSlug" value={estateSlug} /> : null}
       {estateName ? <input type="hidden" name="estateName" value={estateName} /> : null}
