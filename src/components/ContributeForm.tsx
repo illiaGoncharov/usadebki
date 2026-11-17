@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { submitContribution, type FormState } from "@/app/actions";
+import { SupportThanksBanner } from "@/components/SupportThanksBanner";
 import { CONDITIONS, PREDICATES, type PredicateId } from "@/lib/labels";
 import { STYLES } from "@/lib/reference";
 
@@ -16,6 +17,28 @@ export function ContributeForm({
 }) {
   const [state, action, pending] = useActionState(submitContribution, initial);
   const [predicate, setPredicate] = useState<PredicateId>(initialPredicate);
+
+  if (state.sent) {
+    const estateHref = state.estateSlug ? `/estates/${state.estateSlug}` : "/";
+    return (
+      <div>
+        <SupportThanksBanner
+          detail={
+            state.published
+              ? "Правка сразу опубликована на карточке (режим редактора)."
+              : state.emailed
+                ? "Правка в очереди на модерацию. Редакция получила письмо."
+                : "Правка сохранена в очереди. Письмо редактору не ушло — на сервере нет CONTACT_EMAIL/RESEND_API_KEY или Resend вернул ошибку."
+          }
+        />
+        <p className="muted" style={{ marginTop: "1rem" }}>
+          <a className="text-link" href={estateHref}>
+            Вернуться к карточке
+          </a>
+        </p>
+      </div>
+    );
+  }
 
   return (
     <form action={action}>

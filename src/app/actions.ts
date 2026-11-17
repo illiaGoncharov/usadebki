@@ -18,7 +18,15 @@ import {
 } from "@/lib/mail";
 import { isStyleId, styleLabel } from "@/lib/reference";
 
-export type FormState = { error: string | null; sent?: boolean; emailed?: boolean };
+export type FormState = {
+  error: string | null;
+  sent?: boolean;
+  /** Письмо редактору ушло через Resend */
+  emailed?: boolean;
+  /** Редактор: правка сразу в карточке */
+  published?: boolean;
+  estateSlug?: string;
+};
 
 export async function submitInquiry(_prev: FormState, formData: FormData): Promise<FormState> {
   const topicRaw = text(formData.get("topic"));
@@ -159,12 +167,12 @@ export async function submitContribution(_prev: FormState, formData: FormData): 
     await publishContribution(row);
     revalidatePath(`/estates/${slug}`);
     revalidatePath("/");
-    redirect(`/estates/${slug}?sent=1&published=1`);
+    return { error: null, sent: true, published: true, estateSlug: slug };
   }
 
   if (row) {
     const predicateRu = predicateLabel(predicate);
-    await sendContributionMail({
+    const emailed = await sendContributionMail({
       contributionId: row.id,
       authorName,
       contact: contact || null,
@@ -185,9 +193,10 @@ export async function submitContribution(_prev: FormState, formData: FormData): 
         predicateLabel: predicateRu,
       });
     }
+    return { error: null, sent: true, emailed, estateSlug: slug };
   }
 
-  redirect(`/estates/${slug}?sent=1`);
+  return { error: "Не удалось сохранить правку. Попробуйте ещё раз." };
 }
 
 export async function acceptContribution(formData: FormData) {
