@@ -10,7 +10,7 @@ import type { ConditionId } from "../../src/lib/labels";
 const ROOT = "https://hist-usadba.narod.ru";
 const USER_AGENT = "Usadebki/0.1 (local estate catalog; hist-usadba enrichment)";
 const CACHE_DIR = path.join(process.cwd(), "data/hist-usadba/html");
-const PAUSE_MS = 160;
+const PAUSE_MS = 350;
 
 const FIELD_LABELS = [
   "владельцы усадьбы",
@@ -86,8 +86,14 @@ export type EstateMatchRow = {
 };
 
 let fetchChain: Promise<void> = Promise.resolve();
+let networkFails = 0;
 
-function sleep(ms: number) {
+/** Сколько страниц подряд не открылись. Сбрасывается после успешной загрузки. */
+export function histNetworkFails() {
+  return networkFails;
+}
+
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -105,8 +111,13 @@ function cachePath(url: string) {
   return path.join(CACHE_DIR, file);
 }
 
-/** Страница сайта. Повторный запуск читает data/hist-usadba/html. */
-export async function fetchHistHtml(url: string): Promise<string | null> {
+export async function readHistCache(url: string) {
+  try {
+    return decodeHtml(await readFile(cachePath(url)));
+  } catch {
+    return null;
+  }
+}
   await mkdir(CACHE_DIR, { recursive: true });
   const file = cachePath(url);
   try {
@@ -117,19 +128,25 @@ export async function fetchHistHtml(url: string): Promise<string | null> {
 
   const run = async () => {
     let lastError: unknown;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const response = await fetch(url, { headers: { "User-Agent": USER_AGENT }, redirect: "follow" });
+        const response = await fetch(url, {
+          headers: { "User-Agent": USER_AGENT },
+          redirect: "follow",
+          signal: AbortSignal.timeout(12_000),
+        });
         if (!response.ok) return null;
         const buf = Buffer.from(await response.arrayBuffer());
         if (buf.length < 400) return null;
         await writeFile(file, buf);
+        networkFails = 0;
         return decodeHtml(buf);
       } catch (error) {
         lastError = error;
-        await sleep(500 * (attempt + 1));
+        await sleep(800 * (attempt + 1));
       }
     }
+    networkFails += 1;
     console.warn("не скачалось", url, lastError instanceof Error ? lastError.message : lastError);
     return null;
   };
