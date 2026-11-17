@@ -20,7 +20,7 @@ execSync(
     "docker run --rm -i",
     `-v ${JSON.stringify(dataDir)}:/data`,
     "postgres:16-alpine",
-    `pg_restore -d ${JSON.stringify(url)} --no-owner --no-acl /data/usadebki.dump`,
+    `pg_restore -d ${JSON.stringify(url)} --clean --if-exists --no-owner --no-acl /data/usadebki.dump`,
   ].join(" "),
   { stdio: "inherit" },
 );

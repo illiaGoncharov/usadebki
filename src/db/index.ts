@@ -11,7 +11,9 @@ function createSql() {
   if (!url) {
     throw new Error("Не задан DATABASE_URL");
   }
-  return postgres(url, { max: 10 });
+  // Pooled Neon/Vercel: без prepared statements (PgBouncer).
+  const pooled = /-pooler\.|pgbouncer=true/i.test(url);
+  return postgres(url, { max: 10, prepare: !pooled });
 }
 
 export const sql = globalForDb.sql ?? createSql();
