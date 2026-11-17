@@ -85,6 +85,7 @@ async function writeCache(cache: Record<string, CommonsInfo>) {
 type Page = {
   title?: string;
   missing?: string;
+  invalid?: string;
   coordinates?: { lat: number; lon: number }[];
   imageinfo?: { extmetadata?: Record<string, { value?: string }> }[];
 };
@@ -113,10 +114,28 @@ export async function fetchCommonsInfo(
     else todo.push(name);
   }
 
+  try {
+    await fetchBatches(todo, cache, result, onProgress);
+  } finally {
+    // При сбое сети не теряем уже полученное: повторный запуск продолжит с этого места.
+    if (todo.length > 0) await writeCache(cache);
+  }
+  return result;
+}
+
+async function fetchBatches(
+  todo: string[],
+  cache: Record<string, CommonsInfo>,
+  result: Map<string, CommonsInfo>,
+  onProgress?: (done: number, total: number) => void,
+) {
   for (let offset = 0; offset < todo.length; offset += 40) {
     const batch = todo.slice(offset, offset + 40);
-    const json = (await fetchJson(
-      `https://commons.wikimedia.org/w/api.php?${new URLSearchParams({
+    // POST, а не GET: 40 кириллических имён в строке запроса дают HTTP 414 (адрес слишком длинный).
+    const json = (await fetchJson("https://commons.wikimedia.org/w/api.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
         action: "query",
         format: "json",
         redirects: "1",
@@ -125,8 +144,8 @@ export async function fetchCommonsInfo(
         iiprop: "extmetadata",
         iiextmetadatafilter: "ImageDescription|ObjectName",
         titles: batch.map((name) => `File:${name}`).join("|"),
-      })}`,
-    )) as CommonsResponse;
+      }),
+    })) as CommonsResponse;
 
     const rename = new Map<string, string>();
     for (const item of json.query?.normalized ?? []) rename.set(item.from, item.to);
@@ -151,7 +170,7 @@ export async function fetchCommonsInfo(
         coord: page?.coordinates?.[0]
           ? { lat: page.coordinates[0].lat, lng: page.coordinates[0].lon }
           : null,
-        missing: !page || page.missing !== undefined,
+        missing: !page || page.missing !== undefined || page.invalid !== undefined,
       };
       const key = normalizeFileName(name);
       cache[key] = info;
@@ -159,12 +178,9 @@ export async function fetchCommonsInfo(
     }
 
     onProgress?.(Math.min(offset + 40, todo.length), todo.length);
-    if ((offset / 40) % 10 === 9) await writeCache(cache);
+    if ((offset / 40) % 5 === 4) await writeCache(cache);
     await sleep(150);
   }
-
-  if (todo.length > 0) await writeCache(cache);
-  return result;
 }
 
 /**
