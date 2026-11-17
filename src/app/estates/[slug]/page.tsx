@@ -5,6 +5,7 @@ import { EstateMap } from "@/components/EstateMap";
 import { PhotoGallery } from "@/components/PhotoGallery";
 import { Fact } from "@/components/Fact";
 import { Frame } from "@/components/Frame";
+import { EstateHistory } from "@/components/EstateHistory";
 import { RegistryNote } from "@/components/RegistryNote";
 import { getEstate } from "@/db/queries";
 import { cartoKey } from "@/lib/carto";
@@ -54,14 +55,14 @@ export default async function EstatePage({
             <p className="banner">Правка отправлена. На карточке она появится после проверки.</p>
           ) : null}
           <p className="kicker">История</p>
-          {estate.summary ? (
-            <p>{estate.summary}</p>
-          ) : (
-            <p>
-              История этого места ещё не собрана. Если она есть в книге или статье, её можно дописать со ссылкой
-              на источник.
-            </p>
-          )}
+          <EstateHistory
+            summary={estate.summary}
+            summarySource={estate.summarySource}
+            wikipediaTitle={estate.wikipediaTitle}
+            architects={architects}
+            styleIds={estate.styleIds}
+            createdDateText={estate.createdDateText}
+          />
           {estate.lat != null && estate.lng != null ? (
             <EstateMap
               place
@@ -90,7 +91,7 @@ export default async function EstatePage({
               Уточнить
             </a>
           </p>
-          <RegistryNote wikipedia={wikipedia} />
+          <RegistryNote summarySource={estate.summarySource} />
         </div>
       }
       center={

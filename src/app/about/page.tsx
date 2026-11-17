@@ -20,7 +20,7 @@ export default function AboutPage() {
             Готового списка «печальных» усадеб нет. В реестре отмечено, что объект охраняется, но не то, стоит
             ли он ещё. Поэтому фильтр по состоянию пустой, пока кто-то не сверит место.
           </p>
-          <RegistryNote wikipedia />
+          <RegistryNote summarySource="wikipedia" />
         </div>
       }
       center={
