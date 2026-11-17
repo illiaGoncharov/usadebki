@@ -33,18 +33,25 @@ async function main() {
   console.log("");
 
   // Статистика по источникам фото
-  const photoSources = await db
-    .select({
-      origin: photos.origin,
-      count: sqlOp<number>`count(*)::int`,
-    })
-    .from(photos)
-    .groupBy(photos.origin)
-    .orderBy(sqlOp`count(*) desc`);
+  const photoSources = await db.execute<{
+    origin: string;
+    count: number;
+    ensemble_part: number;
+  }>(sqlOp`
+    select 
+      origin,
+      count(*)::int as count,
+      count(case when is_ensemble_part then 1 end)::int as ensemble_part
+    from photos
+    where not is_hidden
+    group by origin
+    order by count(*) desc
+  `);
 
   console.log("=== Фото по источникам ===");
   for (const source of photoSources) {
-    console.log(`  ${source.origin}: ${source.count}`);
+    const ensembleNote = source.ensemble_part > 0 ? ` (из них частей ансамбля: ${source.ensemble_part})` : "";
+    console.log(`  ${source.origin}: ${source.count}${ensembleNote}`);
   }
   console.log("");
 

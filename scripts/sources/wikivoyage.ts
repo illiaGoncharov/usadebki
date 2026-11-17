@@ -58,30 +58,45 @@ export async function fetchWikivoyageHeritage(regionName: string): Promise<Map<s
 
 /**
  * Парсит содержимое страницы списка и извлекает объекты.
- * Викивояж использует шаблон {{listing}}, который содержит параметры.
+ * Викивояж использует шаблоны {{listing}} или {{cultural-heritage-inline}}.
  */
 function parseWikivoyageListing(wikitext: string): Map<string, WikivoyageHeritageItem> {
   const result = new Map<string, WikivoyageHeritageItem>();
 
   // Шаблон {{listing | name=... | knid=... | image=... | commonscat=... }}
-  const listingRegex = /\{\{listing\s*\|([^}]+)\}\}/gi;
-  let match;
+  // или {{cultural-heritage-inline|...}}
+  const patterns = [
+    /\{\{listing\s*\|([^}]+)\}\}/gi,
+    /\{\{cultural-heritage-inline\s*\|([^}]+)\}\}/gi,
+    /\{\{культурное наследие строкой\s*\|([^}]+)\}\}/gi,
+  ];
 
-  while ((match = listingRegex.exec(wikitext)) !== null) {
-    const params = parseTemplateParams(match[1]);
-    const knid = params.get("knid")?.trim();
-    
-    if (!knid) continue;
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(wikitext)) !== null) {
+      const params = parseTemplateParams(match[1]);
+      
+      // knid или регистрационный номер
+      const knid = params.get("knid")?.trim() || params.get("регистрационный номер")?.trim();
+      if (!knid) continue;
 
-    const item: WikivoyageHeritageItem = { knid };
-    
-    const image = params.get("image")?.trim();
-    if (image) item.image = image.replace(/^File:/, "").replace(/^Файл:/, "");
+      const existing = result.get(knid);
+      const item: WikivoyageHeritageItem = existing || { knid };
+      
+      // Изображение
+      const image = params.get("image")?.trim() || params.get("изображение")?.trim();
+      if (image && !item.image) {
+        item.image = image.replace(/^File:/, "").replace(/^Файл:/, "");
+      }
 
-    const commonscat = params.get("commonscat")?.trim();
-    if (commonscat) item.commonscat = commonscat.replace(/^Category:/, "");
+      // Категория Commons
+      const commonscat = params.get("commonscat")?.trim() || params.get("commons")?.trim();
+      if (commonscat && !item.commonscat) {
+        item.commonscat = commonscat.replace(/^Category:/, "").replace(/^Категория:/, "");
+      }
 
-    result.set(knid, item);
+      result.set(knid, item);
+    }
   }
 
   return result;
@@ -92,19 +107,47 @@ function parseWikivoyageListing(wikitext: string): Map<string, WikivoyageHeritag
  */
 function parseTemplateParams(paramsText: string): Map<string, string> {
   const result = new Map<string, string>();
-  const parts = paramsText.split("|");
-
-  for (const part of parts) {
-    const [key, ...valueParts] = part.split("=");
-    if (!key) continue;
+  
+  // Простой парсер с поддержкой вложенных {{}}
+  let depth = 0;
+  let currentParam = "";
+  
+  for (let i = 0; i < paramsText.length; i++) {
+    const char = paramsText[i];
+    const next = paramsText[i + 1];
     
-    const cleanKey = key.trim().toLowerCase();
-    const value = valueParts.join("=").trim();
-    
-    if (value) result.set(cleanKey, value);
+    if (char === "{" && next === "{") {
+      depth++;
+      currentParam += "{{";
+      i++;
+    } else if (char === "}" && next === "}") {
+      depth--;
+      currentParam += "}}";
+      i++;
+    } else if (char === "|" && depth === 0) {
+      parseParam(currentParam, result);
+      currentParam = "";
+    } else {
+      currentParam += char;
+    }
+  }
+  
+  // Последний параметр
+  if (currentParam.trim()) {
+    parseParam(currentParam, result);
   }
 
   return result;
+}
+
+function parseParam(param: string, result: Map<string, string>) {
+  const [key, ...valueParts] = param.split("=");
+  if (!key) return;
+  
+  const cleanKey = key.trim().toLowerCase();
+  const value = valueParts.join("=").trim();
+  
+  if (value) result.set(cleanKey, value);
 }
 
 /**

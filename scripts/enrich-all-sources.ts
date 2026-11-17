@@ -20,6 +20,7 @@ import { estatePeople, estates, estateParts, people, photos, sources } from "../
 import { photoKind, photoRank } from "../src/lib/photo";
 import { stylesFromText, wikiStyleIds } from "../src/lib/reference";
 import { extractEgrknPassportData, generateReferenceText } from "./sources/egrkn-photos";
+import { fetchWikivoyageHeritage } from "./sources/wikivoyage";
 
 const USER_AGENT = "Usadebki/0.1 (local estate catalog; research)";
 const REGION = process.env.ENRICH_REGION;
@@ -82,8 +83,17 @@ async function main() {
     totalWithPhoto += withPhoto;
     totalWithText += withText;
 
-    // 2. Обогащение из Wikivoyage (пока отключено - требует реальный API)
-    // await enrichFromWikivoyage(rows, region.name);
+    // 2. Обогащение из Wikivoyage
+    if (process.env.ENRICH_WIKIVOYAGE === "1") {
+      const regionName = await db
+        .select({ name: estates.regionName })
+        .from(estates)
+        .where(eq(estates.regionId, region.id))
+        .limit(1);
+      if (regionName[0]) {
+        await enrichFromWikivoyage(rows, regionName[0].name);
+      }
+    }
 
     // 3. Обогащение из ЕГРОКН raw_json
     await enrichFromEgrkn(region.id);
@@ -178,6 +188,69 @@ async function enrichFromWikidata(rows: Array<typeof estates.$inferSelect>) {
 
   console.log(`  Wikidata: ${hits.size} совпадений, ${withPhoto} фото, ${withText} текстов`);
   return { withPhoto, withText };
+}
+
+/**
+ * Обогащение из Wikivoyage RU списков наследия.
+ */
+async function enrichFromWikivoyage(rows: Array<typeof estates.$inferSelect>, regionName: string) {
+  console.log(`  Загрузка списка Wikivoyage для ${regionName}...`);
+  
+  let photosAdded = 0;
+  
+  try {
+    const heritage = await fetchWikivoyageHeritage(regionName);
+    
+    if (heritage.size === 0) {
+      console.log(`  Wikivoyage: страница не найдена или пустая`);
+      return;
+    }
+    
+    console.log(`  Wikivoyage: найдено ${heritage.size} объектов`);
+    
+    for (const estate of rows) {
+      const item = heritage.get(estate.egrknRegNumber);
+      if (!item) continue;
+      
+      // Проверяем, есть ли уже фото
+      const hasPhoto = await db
+        .select({ id: photos.id })
+        .from(photos)
+        .where(eq(photos.estateId, estate.id))
+        .limit(1);
+      
+      if (hasPhoto.length > 0) continue;
+      
+      // Добавляем фото из Wikivoyage
+      if (item.image) {
+        const file = commonsFromName(item.image);
+        const meta = await commonsMeta(file.filename);
+        
+        try {
+          await db.insert(photos).values({
+            estateId: estate.id,
+            url: file.display,
+            author: meta.author,
+            license: meta.license,
+            isPrimary: true,
+            sourceUrl: file.page,
+            origin: "wikivoyage",
+          }).onConflictDoNothing({ target: [photos.estateId, photos.url] });
+          photosAdded += 1;
+        } catch {
+          // Игнорируем ошибки
+        }
+        
+        await sleep(100);
+      }
+    }
+    
+    if (photosAdded > 0) {
+      console.log(`  Wikivoyage: ${photosAdded} фото`);
+    }
+  } catch (error) {
+    console.warn(`  Wikivoyage ошибка:`, error instanceof Error ? error.message : error);
+  }
 }
 
 /**
@@ -305,6 +378,8 @@ async function enrichFromEnsembleParts() {
               isPrimary: true,
               sourceUrl: file.page,
               origin: "commons-ensemble",
+              isEnsemblePart: true, // Помечаем как фото части ансамбля
+              depictsEgrknNumber: row.egrkn?.value ?? null, // Сохраняем номер части
             });
             inherited += 1;
             break; // Хватит одного фото от части
@@ -362,7 +437,6 @@ async function fillMorePhotos() {
   }
 
   const fresh: { estateId: string; file: NonNullable<ReturnType<typeof commonsFile>>; primary: boolean }[] = [];
-  let looked = 0;
 
   for (const [reg, bag] of bags) {
     const estate = byReg.get(reg);
@@ -372,21 +446,15 @@ async function fillMorePhotos() {
     if (room <= 0) continue;
     const hadPhoto = known.size > 0;
     
+    // ТОЛЬКО прямые P18 фото из Wikidata, НЕ берём все из категории
+    // (категория может быть для ансамбля и содержать фото других объектов)
     const names = bag.files.flatMap((item) => {
       const file = commonsFile(item);
       return file ? [file.filename] : [];
     });
 
-    if (names.length < PHOTO_CAP && bag.category) {
-      try {
-        names.push(...(await categoryFiles(bag.category)));
-      } catch (error) {
-        console.warn(`    Категория «${bag.category}»:`, error instanceof Error ? error.message : error);
-      }
-      looked += 1;
-      if (looked % 40 === 0) console.log(`    категорий обработано: ${looked}`);
-      await sleep(200);
-    }
+    // УДАЛЕНО: categoryFiles(bag.category) - это небезопасно!
+    // Если нужны фото из категории, они должны быть отфильтрованы по depicts/coordinates
 
     const ranked = [...names]
       .filter(isEstatePhoto)
@@ -620,25 +688,10 @@ async function askPhotoClaims() {
   return json.results?.bindings ?? [];
 }
 
-async function categoryFiles(category: string) {
-  const response = await fetchRetry(
-    `https://commons.wikimedia.org/w/api.php?${new URLSearchParams({
-      action: "query",
-      format: "json",
-      list: "categorymembers",
-      cmtitle: `Category:${category}`,
-      cmtype: "file",
-      cmlimit: "24",
-    })}`,
-    { headers: { "User-Agent": USER_AGENT } },
-  );
-  if (!response?.ok) return [];
-  const json = (await response.json()) as { query?: { categorymembers?: { title?: string }[] } };
-  return (json.query?.categorymembers ?? []).flatMap((item) => {
-    const title = item.title?.replace(/^File:/, "").trim();
-    return title ? [title] : [];
-  });
-}
+// УДАЛЕНО: categoryFiles брал все фото из категории без проверки depicts
+// Это приводило к прикреплению фото других объектов (баг с желтым зданием)
+// Для безопасного использования категорий нужна проверка через SDC (depicts/coordinates)
+// см. scripts/sources/commons-structured-data.ts
 
 function commonsFromName(filename: string) {
   return {
