@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ContributeForm } from "@/components/ContributeForm";
 import { Frame } from "@/components/Frame";
+import { SupportThanksBanner } from "@/components/SupportThanksBanner";
 import { getEstate } from "@/db/queries";
 import { estateDisplayTitle } from "@/lib/estate-display-name";
 import { isAdmin } from "@/lib/admin";
@@ -14,10 +15,11 @@ export default async function ContributePage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ field?: string }>;
+  searchParams: Promise<{ field?: string; thanks?: string; published?: string; emailed?: string; error?: string }>;
 }) {
   const { slug } = await params;
-  const { field } = await searchParams;
+  const { field, thanks, published, emailed, error: errorRaw } = await searchParams;
+  const formError = errorRaw?.trim() || null;
   const estate = await getEstate(slug);
   if (!estate) notFound();
   const { title: displayName } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
@@ -58,7 +60,26 @@ export default async function ContributePage({
         <div>
           <p className="kicker">{estate.regionName}</p>
           <h1>{displayName}</h1>
-          <ContributeForm slug={estate.slug} initialPredicate={predicate} />
+          {thanks === "1" ? (
+            <SupportThanksBanner
+              detail={
+                published === "1"
+                  ? "Правка сразу опубликована на карточке (режим редактора)."
+                  : emailed === "0"
+                    ? "Правка сохранена в очереди. Письмо редактору не ушло — проверьте CONTACT_EMAIL/RESEND на сервере."
+                    : "Правка в очереди на модерацию. После проверки она появится в карточке."
+              }
+            />
+          ) : (
+            <ContributeForm slug={estate.slug} initialPredicate={predicate} error={formError} />
+          )}
+          {thanks === "1" ? (
+            <p className="muted" style={{ marginTop: "1rem" }}>
+              <a className="text-link" href={`/estates/${estate.slug}`}>
+                Вернуться к карточке
+              </a>
+            </p>
+          ) : null}
         </div>
       }
       right={

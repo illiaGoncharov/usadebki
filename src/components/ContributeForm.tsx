@@ -1,47 +1,23 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { submitContribution, type FormState } from "@/app/actions";
-import { SupportThanksBanner } from "@/components/SupportThanksBanner";
+import { useState } from "react";
+import { submitContributionFromForm } from "@/app/actions";
 import { CONDITIONS, PREDICATES, type PredicateId } from "@/lib/labels";
 import { STYLES } from "@/lib/reference";
-
-const initial: FormState = { error: null };
 
 export function ContributeForm({
   slug,
   initialPredicate,
+  error,
 }: {
   slug: string;
   initialPredicate: PredicateId;
+  error?: string | null;
 }) {
-  const [state, action, pending] = useActionState(submitContribution, initial);
   const [predicate, setPredicate] = useState<PredicateId>(initialPredicate);
 
-  if (state.sent) {
-    const estateHref = state.estateSlug ? `/estates/${state.estateSlug}` : "/";
-    return (
-      <div>
-        <SupportThanksBanner
-          detail={
-            state.published
-              ? "Правка сразу опубликована на карточке (режим редактора)."
-              : state.emailed
-                ? "Правка в очереди на модерацию. Редакция получила письмо."
-                : "Правка сохранена в очереди. Письмо редактору не ушло — на сервере нет CONTACT_EMAIL/RESEND_API_KEY или Resend вернул ошибку."
-          }
-        />
-        <p className="muted" style={{ marginTop: "1rem" }}>
-          <a className="text-link" href={estateHref}>
-            Вернуться к карточке
-          </a>
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <form action={action}>
+    <form action={submitContributionFromForm}>
       <input type="hidden" name="slug" value={slug} />
       <label className="kicker" htmlFor="predicate">
         Что уточняете
@@ -105,9 +81,9 @@ export function ContributeForm({
         placeholder="Почта — пришлём «Спасибо» и ответ"
       />
 
-      {state.error ? <p className="banner">{state.error}</p> : null}
-      <button className="text-button" type="submit" disabled={pending}>
-        {pending ? "Отправляем" : "Отправить правку"}
+      {error ? <p className="banner">{error}</p> : null}
+      <button className="text-button" type="submit">
+        Отправить правку
       </button>
     </form>
   );
