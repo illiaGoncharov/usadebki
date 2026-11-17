@@ -160,6 +160,8 @@ export async function listEstates(options: {
       select url
       from photos
       where estate_id = e.id
+        and is_hidden = false
+        and is_ensemble_part = false
       order by photo_kind(url), is_primary desc
       limit 1
     ) p on true
@@ -312,6 +314,8 @@ async function featuredInRegion(regionId: string | null) {
       select url, author, license
       from photos
       where estate_id = e.id
+        and is_hidden = false
+        and is_ensemble_part = false
       order by photo_kind(url), is_primary desc
       limit 1
     ) p on true

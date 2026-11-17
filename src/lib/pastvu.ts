@@ -16,7 +16,8 @@ export type PastVuPhoto = {
   year2: number | null;
   author: string | null;
   source: string | null;
-  thumb: string; // thumbnail URL
+  thumb: string;
+  full: string;
   link: string; // pastvu.com link
   lat: number;
   lng: number;
@@ -26,13 +27,13 @@ export type PastVuPhoto = {
  * Загружает исторические фото рядом с координатами.
  * @param lat широта
  * @param lng долгота
- * @param radiusKm радиус поиска в км (по умолчанию 0.5 км = 500 м)
+ * @param radiusKm радиус поиска в км (по умолчанию 0.25 км = 250 м)
  * @param limit максимум фото (по умолчанию 10)
  */
 export async function fetchNearbyHistoricalPhotos(
   lat: number,
   lng: number,
-  radiusKm: number = 0.5,
+  radiusKm: number = 0.25,
   limit: number = 10
 ): Promise<PastVuPhoto[]> {
   try {
@@ -94,6 +95,7 @@ export async function fetchNearbyHistoricalPhotos(
         author: p.author || null,
         source: p.source || null,
         thumb: `https://img.pastvu.com/h/${p.file}`,
+        full: `https://img.pastvu.com/d/${p.file}`,
         link: `https://pastvu.com/${p.cid}`,
         lat: p.geo![0],
         lng: p.geo![1],

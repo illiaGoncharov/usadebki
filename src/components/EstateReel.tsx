@@ -98,7 +98,10 @@ export function EstateReel({
                   <span className="reel-slide__caption">
                     <span className="kicker">{row.regionName}</span>
                     <span className="reel-slide__name">{row.name}</span>
-                    <span className="reel-slide__meta">открыть карточку</span>
+                    <span className="reel-slide__meta">
+                      {row.objectType === "Ансамбль" ? "ансамбль · " : null}
+                      открыть карточку
+                    </span>
                   </span>
                 </a>
               ))}
@@ -126,7 +129,14 @@ function Glance({ row }: { row: CatalogRow }) {
       <p className="kicker">{row.regionName}</p>
       <p className="reel-aside__name">{row.name}</p>
       <p className="muted">
-        {[row.createdDateText, shortKind(row.objectType), shortRank(row.category)].filter(Boolean).join(" · ")}
+        {[
+          row.objectType === "Ансамбль" ? "ансамбль" : null,
+          row.createdDateText,
+          shortKind(row.objectType),
+          shortRank(row.category),
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       </p>
       {row.styleIds?.length ? <p>{row.styleIds.map((id) => styleLabel(id)).join(", ")}</p> : null}
       <p>
