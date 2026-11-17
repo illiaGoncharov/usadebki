@@ -118,13 +118,14 @@ export async function readHistCache(url: string) {
     return null;
   }
 }
+
+/** Страница сайта. Повторный запуск читает data/hist-usadba/html. */
+export async function fetchHistHtml(url: string): Promise<string | null> {
+  const cached = await readHistCache(url);
+  if (cached) return cached;
+
   await mkdir(CACHE_DIR, { recursive: true });
   const file = cachePath(url);
-  try {
-    return decodeHtml(await readFile(file));
-  } catch {
-    /* нет кэша */
-  }
 
   const run = async () => {
     let lastError: unknown;
@@ -135,7 +136,10 @@ export async function readHistCache(url: string) {
           redirect: "follow",
           signal: AbortSignal.timeout(12_000),
         });
-        if (!response.ok) return null;
+        if (!response.ok) {
+          if (response.status !== 404) networkFails += 1;
+          return null;
+        }
         const buf = Buffer.from(await response.arrayBuffer());
         if (buf.length < 400) return null;
         await writeFile(file, buf);
