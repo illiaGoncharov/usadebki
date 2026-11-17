@@ -52,10 +52,11 @@ export async function fetchNearbyHistoricalPhotos(
     });
     const url = `${PASTVU_API}?${params.toString()}`;
 
+    const timeoutMs = process.env.VERCEL ? 4_000 : 10_000;
     const response = await fetch(url, {
       headers: { "User-Agent": USER_AGENT },
       next: { revalidate: 86400 },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     if (!response.ok) {
@@ -119,11 +120,16 @@ export async function fetchNearbyHistoricalPhotosPaged(
   radiusKm: number,
   pages: number,
 ): Promise<PastVuPhoto[]> {
+  try {
   const chunks = await Promise.all(
     Array.from({ length: pages }, (_, i) => fetchNearbyHistoricalPhotos(lat, lng, radiusKm, 30, i * 30)),
   );
   const seen = new Set<number>();
   return chunks.flat().filter((photo) => (seen.has(photo.cid) ? false : (seen.add(photo.cid), true)));
+  } catch (error) {
+    console.warn("PastVu paged fetch error:", error instanceof Error ? error.message : error);
+    return [];
+  }
 }
 
 /** Расстояние между точками в метрах (для выбора ближайшего снимка к объекту). */

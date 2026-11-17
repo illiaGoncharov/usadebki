@@ -127,10 +127,9 @@ export async function submitContributionFromForm(formData: FormData) {
   }
 
   if (state.sent && slug) {
-    const bits = ["thanks=1"];
+    const bits = ["sent=1"];
     if (state.published) bits.push("published=1");
-    if (state.emailed === false) bits.push("emailed=0");
-    redirect(`${contributePath}&${bits.join("&")}`);
+    redirect(`/estates/${slug}?${bits.join("&")}`);
   }
 
   const err = encodeURIComponent(state.error ?? "Ошибка");
