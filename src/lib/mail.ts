@@ -51,14 +51,20 @@ async function sendResendEmail(body: ResendBody): Promise<boolean> {
   }
   if (!body.to.length) return false;
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ...body, from: body.from || defaultFrom() }),
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ...body, from: body.from || defaultFrom() }),
+    });
+  } catch (error) {
+    console.error("[mail] Resend fetch:", error);
+    return false;
+  }
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
