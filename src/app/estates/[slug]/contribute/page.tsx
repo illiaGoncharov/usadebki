@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ContributeForm } from "@/components/ContributeForm";
 import { Frame } from "@/components/Frame";
 import { getEstate } from "@/db/queries";
+import { estateDisplayTitle } from "@/lib/estate-display-name";
 import { isPredicateId, type PredicateId } from "@/lib/labels";
 
 export const metadata: Metadata = { title: "Уточнение" };
@@ -18,13 +19,14 @@ export default async function ContributePage({
   const { field } = await searchParams;
   const estate = await getEstate(slug);
   if (!estate) notFound();
+  const { title: displayName } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
   const predicate: PredicateId = field && isPredicateId(field) ? field : "owners";
 
   return (
     <Frame
       crumb={
         <>
-          <a href={`/estates/${estate.slug}`}>{estate.name}</a>
+          <a href={`/estates/${estate.slug}`}>{displayName}</a>
           <span> &gt; Уточнение</span>
         </>
       }
@@ -42,7 +44,7 @@ export default async function ContributePage({
       center={
         <div>
           <p className="kicker">{estate.regionName}</p>
-          <h1>{estate.name}</h1>
+          <h1>{displayName}</h1>
           <ContributeForm slug={estate.slug} initialPredicate={predicate} />
         </div>
       }

@@ -59,7 +59,7 @@ export function PhotoGallery({ name, photos }: { name: string; photos: Shot[] })
         {photo.sourceUrl ? (
           <>
             {" · "}
-            <a className="text-link" href={photo.sourceUrl}>
+            <a className="text-link" href={photo.sourceUrl} target="_blank" rel="noopener noreferrer">
               файл
             </a>
           </>

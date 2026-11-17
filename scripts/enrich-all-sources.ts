@@ -121,6 +121,8 @@ async function main() {
 
   console.log("\n--- Извлечение стилей из текстов ---");
   await fillStylesFromText();
+
+  console.log("\nДальше проверьте фото: npm run photos:audit (пробный запуск), затем с --apply.");
 }
 
 /**

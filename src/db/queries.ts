@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { PHOTO_KIND_SQL, photoKind, photoRank } from "@/lib/photo";
+import { PHOTO_KIND_SQL, photoFileKey, photoKind, photoRank } from "@/lib/photo";
 import { AGGLOMERATIONS } from "@/lib/reference";
 import { placeFromAddress } from "@/lib/search";
 import { db, sql as pg } from "./index";
@@ -29,6 +29,7 @@ function ensurePhotoKind() {
 export type CatalogRow = {
   slug: string;
   name: string;
+  wikipediaTitle: string | null;
   regionId: string;
   regionName: string;
   address: string | null;
@@ -160,7 +161,9 @@ export async function listEstates(options: {
       select url
       from photos
       where estate_id = e.id
-      order by photo_kind(url), is_primary desc
+        and is_hidden = false
+        and is_ensemble_part = false
+      order by (photo_kind(url) >= 3), is_primary desc, photo_kind(url)
       limit 1
     ) p on true
     left join lateral (
@@ -250,7 +253,7 @@ export async function listEstates(options: {
   `;
   const [rowsResult, countResult] = await Promise.all([
     db.execute<CatalogRow & { era_year: number | null }>(sql`
-      select slug, name, "regionId", "regionName", address, category, "objectType",
+      select slug, name, "wikipediaTitle", "regionId", "regionName", address, category, "objectType",
              "createdDateText", summary, condition, style, "styleIds", "photoUrl", km, city
       from (${base}) e
       ${where}
@@ -312,7 +315,9 @@ async function featuredInRegion(regionId: string | null) {
       select url, author, license
       from photos
       where estate_id = e.id
-      order by photo_kind(url), is_primary desc
+        and is_hidden = false
+        and is_ensemble_part = false
+      order by (photo_kind(url) >= 3), is_primary desc, photo_kind(url)
       limit 1
     ) p on true
     where (${regionId}::text is null or e.region_id = ${regionId})
@@ -396,12 +401,25 @@ export async function getEstate(slug: string) {
 
   const roleOrder = (role: string) => (role === "last_owner" ? 0 : role === "owner" ? 1 : 2);
 
+  const primaryPhotos = photoRows.filter((row) => row.isPrimary);
+  const dedupedPrimary = new Map<string, (typeof photoRows)[number]>();
+  for (const row of primaryPhotos) {
+    const key = photoFileKey(row.url);
+    const existing = dedupedPrimary.get(key);
+    if (!existing || (!existing.isPrimary && row.isPrimary)) dedupedPrimary.set(key, row);
+  }
+  const galleryPhotos = [...dedupedPrimary.values()]
+    .sort(
+      (a, b) =>
+        photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)) ||
+        a.url.localeCompare(b.url, "ru"),
+    )
+    .slice(0, 1);
+
   return {
     ...estate,
     parts: parts.sort((a, b) => a.name.localeCompare(b.name, "ru")),
-    photos: photoRows.sort(
-      (a, b) => photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)) || Number(b.isPrimary) - Number(a.isPrimary),
-    ),
+    photos: galleryPhotos,
     ensemblePhotos: ensemblePhotoRows.sort(
       (a, b) => photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)),
     ),

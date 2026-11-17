@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { BackToReel } from "@/components/BackToReel";
 import { EstateMap } from "@/components/EstateMap";
 import { PhotoGallery } from "@/components/PhotoGallery";
+import { EnsemblePartsGallery } from "@/components/EnsemblePartsGallery";
+import { PastVuGallery } from "@/components/PastVuGallery";
+import { PastVuHeroPlaceholder } from "@/components/PastVuHeroPlaceholder";
 import { Fact } from "@/components/Fact";
 import { Frame } from "@/components/Frame";
 import { EstateHistory } from "@/components/EstateHistory";
@@ -10,15 +13,32 @@ import { RegistryNote } from "@/components/RegistryNote";
 import { getEstate } from "@/db/queries";
 import { cartoKey } from "@/lib/carto";
 import { catalogHref } from "@/lib/catalog-url";
+import { estateDisplayTitle } from "@/lib/estate-display-name";
 import { conditionLabel, roleLabel } from "@/lib/labels";
-import { guberniaByRegion, nearestAgglomeration, styleLabel } from "@/lib/reference";
+import {
+  formatAgglomerationDistance,
+  guberniaByRegion,
+  nearestAgglomeration,
+  styleLabel,
+} from "@/lib/reference";
+import {
+  estateToponymStems,
+  filterPastVuGalleryPhotos,
+  pastVuSearchPages,
+  pastVuSearchRadiusKm,
+  pickRelevantPastVuHero,
+} from "@/lib/pastvu-match";
+import { pickDiversePastVuGallery } from "@/lib/pastvu-subjects";
+import { fetchNearbyHistoricalPhotosPaged } from "@/lib/pastvu";
 
 type Params = { slug: string };
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { slug } = await params;
   const estate = await getEstate(slug);
-  return { title: estate?.name ?? "Усадьба" };
+  if (!estate) return { title: "Усадьба" };
+  const { title } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
+  return { title };
 }
 
 export default async function EstatePage({
@@ -33,6 +53,8 @@ export default async function EstatePage({
   const estate = await getEstate(slug);
   if (!estate) notFound();
 
+  const { title: displayName, registryNote } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
+
   const owners = estate.people.filter((person) => person.role !== "architect");
   const architects = estate.people.filter((person) => person.role === "architect");
   const dates = [estate.createdDateText, ...estate.yearNotes.map((note) => note.text)].filter(Boolean);
@@ -40,6 +62,37 @@ export default async function EstatePage({
   const gubernia = guberniaByRegion(estate.regionId);
   const distance =
     estate.lat != null && estate.lng != null ? nearestAgglomeration(estate.lat, estate.lng) : null;
+
+  const hasCoords = estate.lat != null && estate.lng != null;
+  const pastvuContext = {
+    name: estate.name,
+    wikipediaTitle: estate.wikipediaTitle,
+    address: estate.address,
+    displayTitle: displayName,
+    objectType: estate.objectType,
+    lat: estate.lat,
+    lng: estate.lng,
+  };
+  const pastvuPhotos = hasCoords
+    ? await fetchNearbyHistoricalPhotosPaged(
+        estate.lat!,
+        estate.lng!,
+        pastVuSearchRadiusKm(pastvuContext),
+        pastVuSearchPages(pastvuContext),
+      )
+    : [];
+  // Для любого объекта: чужое отсекаем по подписи, из оставшегося — по одному кадру на сюжет.
+  const pastvuRelevant = pickDiversePastVuGallery(filterPastVuGalleryPhotos(pastvuPhotos, pastvuContext), {
+    max: 8,
+    toponymStems: estateToponymStems(pastvuContext),
+  });
+  const pastvuHero =
+    estate.photos.length === 0 && hasCoords
+      ? pickRelevantPastVuHero(pastvuPhotos, estate.lat!, estate.lng!, pastvuContext)
+      : null;
+  const pastvuForGallery = pastvuHero
+    ? pastvuRelevant.filter((photo) => photo.cid !== pastvuHero.cid)
+    : pastvuRelevant;
 
   return (
     <Frame
@@ -59,9 +112,12 @@ export default async function EstatePage({
             summary={estate.summary}
             summarySource={estate.summarySource}
             wikipediaTitle={estate.wikipediaTitle}
+            wikipediaUrl={estate.wikipediaUrl}
+            registryNameNote={registryNote}
             architects={architects}
             styleIds={estate.styleIds}
             createdDateText={estate.createdDateText}
+            slug={estate.slug}
           />
           {estate.lat != null && estate.lng != null ? (
             <EstateMap
@@ -96,31 +152,27 @@ export default async function EstatePage({
       }
       center={
         <article>
-          {estate.photos.length === 0 ? (
-            <>
-              <div className="photo-empty">Фотографии пока нет</div>
-              <p className="caption">Снимок ещё не привязан</p>
-            </>
+          {estate.photos.length > 0 ? (
+            <PhotoGallery name={displayName} photos={estate.photos} />
+          ) : pastvuHero ? (
+            <PastVuHeroPlaceholder photo={pastvuHero} estateName={displayName} />
           ) : (
-            <PhotoGallery name={estate.name} photos={estate.photos} />
+            <>
+              <div className="photo-empty">Подтверждённого снимка пока нет</div>
+              <p className="caption">
+                {estate.ensemblePhotos && estate.ensemblePhotos.length > 0
+                  ? "Ниже — фото других частей ансамбля."
+                  : hasCoords
+                    ? "Рядом с объектом на PastVu тоже нет снимков в радиусе 250 м."
+                    : "После проверки снимков из Commons здесь появится одно фото главного здания."}
+              </p>
+            </>
           )}
           <p className="kicker">
             {estate.objectType ?? "Объект"} · {estate.regionName}
           </p>
-          <h1>{estate.name}</h1>
+          <h1>{displayName}</h1>
           {estate.address ? <p className="muted">{estate.address}</p> : null}
-          {estate.lat != null && estate.lng != null ? (
-            <p>
-              <a
-                className="text-link"
-                href={`https://pastvu.com/?g=${estate.lat},${estate.lng}&z=17&t=map`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Как выглядело раньше — PastVu
-              </a>
-            </p>
-          ) : null}
           <p className="kicker" style={{ marginTop: "1.6rem" }}>
             Состав
           </p>
@@ -140,6 +192,18 @@ export default async function EstatePage({
               ))}
             </ul>
           )}
+          {estate.ensemblePhotos && estate.ensemblePhotos.length > 0 ? (
+            <EnsemblePartsGallery photos={estate.ensemblePhotos} parts={estate.parts} />
+          ) : null}
+          {hasCoords && pastvuPhotos.length > 0 ? (
+            <PastVuGallery
+              lat={estate.lat!}
+              lng={estate.lng!}
+              estateName={displayName}
+              radiusMeters={Math.round(pastVuSearchRadiusKm(pastvuContext) * 1000)}
+              photos={pastvuForGallery}
+            />
+          ) : null}
         </article>
       }
       right={
@@ -177,7 +241,7 @@ export default async function EstatePage({
           <Fact label="Губерния">{gubernia?.name ?? "для этого региона справка ещё не написана"}</Fact>
           <Fact label="До города">
             {distance ? (
-              `${distance.km} км от ${distance.name}`
+              formatAgglomerationDistance(distance) ?? <span className="muted">нет точки</span>
             ) : (
               <span className="muted">нет точки</span>
             )}

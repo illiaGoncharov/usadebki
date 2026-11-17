@@ -1,3 +1,4 @@
+import { mergeRegistryNoteIntoHistory } from "@/lib/estate-display-name";
 import { wikipediaIntro } from "@/lib/wikipedia";
 import { styleLabel } from "@/lib/reference";
 
@@ -7,9 +8,12 @@ type Props = {
   summary: string | null;
   summarySource: string | null;
   wikipediaTitle: string | null;
+  wikipediaUrl: string | null;
+  registryNameNote: string | null;
   architects: Person[];
   styleIds: string[];
   createdDateText: string | null;
+  slug: string;
 };
 
 /**
@@ -19,9 +23,12 @@ export async function EstateHistory({
   summary,
   summarySource,
   wikipediaTitle,
+  wikipediaUrl,
+  registryNameNote,
   architects,
   styleIds,
   createdDateText,
+  slug,
 }: Props) {
   const fromWiki = summarySource === "wikipedia";
   const fromEgrkn = summarySource === "egrkn-passport";
@@ -32,6 +39,11 @@ export async function EstateHistory({
     if (intro && intro.length > body.length) body = intro;
   }
 
+  const bodyBeforeRegistry = body;
+  body = mergeRegistryNoteIntoHistory(body, registryNameNote);
+  const addedRegistryTail =
+    Boolean(registryNameNote?.trim()) && body.length > bodyBeforeRegistry.trim().length + 12;
+
   const styles = styleIds.map((id) => styleLabel(id)).filter(Boolean);
   const architectNames = architects.map((p) => p.name).filter(Boolean);
   const credits = buildCredits({ styles, architectNames, createdDateText, fromEgrkn });
@@ -40,18 +52,40 @@ export async function EstateHistory({
     <>
       {body ? (
         <>
-          {fromWiki ? <p className="caption" style={{ marginBottom: "0.35rem" }}>Из статьи в русской Википедии</p> : null}
+          {fromWiki && wikipediaUrl ? (
+            <p className="caption" style={{ marginBottom: "0.35rem" }}>
+              Из{" "}
+              <a className="text-link" href={wikipediaUrl} target="_blank" rel="noopener noreferrer">
+                статьи в русской Википедии
+              </a>
+            </p>
+          ) : null}
           {fromEgrkn ? (
             <p className="caption" style={{ marginBottom: "0.35rem" }}>
               Справка из паспорта реестра (не полная история)
             </p>
+          ) : addedRegistryTail && fromWiki ? (
+            <p className="caption" style={{ marginBottom: "0.35rem" }}>
+              В начале — уточнения из наименования в реестре, ниже — статья Википедии
+            </p>
+          ) : addedRegistryTail ? (
+            <p className="caption" style={{ marginBottom: "0.35rem" }}>
+              Из наименования в реестре
+            </p>
           ) : null}
-          <p>{body}</p>
+          {body.includes("\n\n") ? (
+            body.split("\n\n").map((paragraph, index) => <p key={index}>{paragraph}</p>)
+          ) : (
+            <p>{body}</p>
+          )}
         </>
       ) : (
         <p>
-          История этого места ещё не собрана. Если она есть в книге или статье, её можно дописать со ссылкой на
-          источник.
+          История этого места ещё не собрана. Если она есть в книге или статье, её можно{" "}
+          <a className="text-link" href={`/estates/${slug}/contribute?field=note`}>
+            дописать со ссылкой на источник
+          </a>
+          .
         </p>
       )}
       {credits ? (
