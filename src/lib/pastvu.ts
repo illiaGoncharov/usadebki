@@ -5,7 +5,8 @@
  */
 
 const USER_AGENT = "Usadebki/0.1 (open catalog; contact via GitHub illiaGoncharov/usadebki)";
-const PASTVU_API = "https://pastvu.com/_api";
+/** @see https://docs.pastvu.com/dev/api */
+const PASTVU_API = "https://api.pastvu.com/api2";
 
 export type PastVuPhoto = {
   cid: number;
@@ -35,25 +36,22 @@ export async function fetchNearbyHistoricalPhotos(
   limit: number = 10
 ): Promise<PastVuPhoto[]> {
   try {
-    // PastVu API: /photo/giveNearestPhotos
-    const url = `${PASTVU_API}/photo/giveNearestPhotos`;
-    
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": USER_AGENT,
-      },
-      body: JSON.stringify({
-        geo: [lng, lat], // PastVu использует [lng, lat]
-        z: 15, // zoom level
-        distance: radiusKm * 1000, // в метрах
-        limit,
-        except: [],
-        year: { from: 1800, to: 1990 }, // только старые фото
+    const params = new URLSearchParams({
+      method: "photo.giveNearestPhotos",
+      params: JSON.stringify({
+        geo: [lat, lng],
+        distance: Math.round(radiusKm * 1000),
+        limit: Math.min(limit, 30),
+        year: 1800,
+        year2: 1990,
         type: "photo",
       }),
-      next: { revalidate: 86400 }, // кэш на сутки
+    });
+    const url = `${PASTVU_API}?${params.toString()}`;
+
+    const response = await fetch(url, {
+      headers: { "User-Agent": USER_AGENT },
+      next: { revalidate: 86400 },
       signal: AbortSignal.timeout(10000),
     });
 
@@ -63,6 +61,7 @@ export async function fetchNearbyHistoricalPhotos(
     }
 
     const json = (await response.json()) as {
+      code?: string;
       result?: {
         photos?: Array<{
           cid?: number;
@@ -77,6 +76,11 @@ export async function fetchNearbyHistoricalPhotos(
       };
     };
 
+    if (json.code) {
+      console.warn(`PastVu API error: ${json.code}`);
+      return [];
+    }
+
     const photos = json.result?.photos ?? [];
     
     return photos
@@ -89,10 +93,10 @@ export async function fetchNearbyHistoricalPhotos(
         year2: p.year2 || null,
         author: p.author || null,
         source: p.source || null,
-        thumb: `https://pastvu.com/_p/d/${p.file}`,
+        thumb: `https://img.pastvu.com/h/${p.file}`,
         link: `https://pastvu.com/${p.cid}`,
-        lat: p.geo![1],
-        lng: p.geo![0],
+        lat: p.geo![0],
+        lng: p.geo![1],
       }))
       .sort((a, b) => {
         // Сортируем по году (старые первыми)
