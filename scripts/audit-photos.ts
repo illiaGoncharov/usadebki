@@ -98,11 +98,13 @@ async function main() {
     .groupBy(estateParts.estateId);
   const partsCount = new Map(partsRows.map((row) => [row.estateId, row.count]));
 
-  // Скрытое вручную не трогаем. Уже отнесённое к частям ансамбля — тоже.
-  const photoRows = (await db.select().from(photos).where(eq(photos.isHidden, false))).filter((row) =>
-    estateById.has(row.estateId),
+  const photoRows = (await db.select().from(photos)).filter((row) => estateById.has(row.estateId));
+  // Повторно проверяем и скрытые commons-снимки: после смены правил можно вернуть здание вместо сада.
+  const candidates = photoRows.filter(
+    (row) =>
+      !row.isEnsemblePart &&
+      (!row.isHidden || row.origin === "commons" || row.origin === "commons-ensemble"),
   );
-  const candidates = photoRows.filter((row) => !row.isEnsemblePart);
   console.log(`Объектов: ${estateRows.length}. Видимых фото к проверке: ${candidates.length}.`);
 
   const commonsRows = candidates.filter((row) => row.origin === "commons" || row.origin === "commons-ensemble");

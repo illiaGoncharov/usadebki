@@ -1,16 +1,102 @@
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { contributions, estatePeople, estates, people, sources, statements } from "@/db/schema";
+import { contributions, estates, inquiries } from "@/db/schema";
 import { adminCookie, adminToken, isAdmin } from "@/lib/admin";
-import { isConditionId, isPredicateId, splitOwnerNames } from "@/lib/labels";
-import { isStyleId } from "@/lib/reference";
+import { publishContribution, publishContributionById } from "@/lib/contribution-publish";
+import { conditionLabel, isConditionId, isPredicateId, predicateLabel, splitOwnerNames } from "@/lib/labels";
+import { readInquiryAttachment, saveInquiryAttachment } from "@/lib/inquiry-attachment";
+import {
+  sendContributionMail,
+  sendContributionThanksMail,
+  sendInquiryMail,
+  sendInquiryThanksMail,
+} from "@/lib/mail";
+import { isStyleId, styleLabel } from "@/lib/reference";
 
-export type FormState = { error: string | null };
+export type FormState = { error: string | null; sent?: boolean; emailed?: boolean };
+
+export async function submitInquiry(_prev: FormState, formData: FormData): Promise<FormState> {
+  const topicRaw = text(formData.get("topic"));
+  const topic = topicRaw === "photo" ? "photo" : "general";
+  const message = text(formData.get("message"));
+  const authorName = text(formData.get("authorName"));
+  const contact = text(formData.get("contact"));
+  const estateSlug = text(formData.get("estateSlug")) || null;
+  const estateName = text(formData.get("estateName")) || null;
+  const pageUrl = text(formData.get("pageUrl")) || null;
+  const suggestedPhotoUrlRaw = text(formData.get("suggestedPhotoUrl"));
+  const suggestedPhotoUrl = suggestedPhotoUrlRaw ? cleanUrl(suggestedPhotoUrlRaw) : null;
+  if (suggestedPhotoUrlRaw && !suggestedPhotoUrl) {
+    return { error: "Ссылка на снимок должна начинаться с http:// или https://." };
+  }
+
+  let attachment: Awaited<ReturnType<typeof readInquiryAttachment>> = null;
+  try {
+    attachment = await readInquiryAttachment(formData.get("attachment"));
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Не удалось прочитать файл." };
+  }
+
+  const hasPhotoHint = Boolean(suggestedPhotoUrl || attachment);
+  if (message.length > 4000) return { error: "Текст слишком длинный." };
+  if (topic === "photo" && !hasPhotoHint && message.length < 10) {
+    return { error: "Опишите проблему, приложите снимок или дайте ссылку на верное фото." };
+  }
+  if (message.length < 3 && !hasPhotoHint) {
+    return { error: "Напишите хотя бы пару слов." };
+  }
+  if (authorName.length < 2 || authorName.length > 120) {
+    return { error: "Укажите, как к вам обращаться." };
+  }
+  if (!contact || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)) {
+    return { error: "Нужна рабочая почта для ответа." };
+  }
+
+  const emailed = await sendInquiryMail({
+    topic,
+    authorName,
+    contact,
+    message,
+    estateName,
+    estateSlug,
+    pageUrl,
+    suggestedPhotoUrl,
+    attachment: attachment ? { filename: attachment.filename, content: attachment.buffer } : null,
+  });
+  if (emailed) {
+    await sendInquiryThanksMail({ authorName, contact, topic });
+  }
+
+  const [row] = await db
+    .insert(inquiries)
+    .values({
+      topic,
+      estateSlug,
+      estateName,
+      message,
+      authorName,
+      contact,
+      pageUrl,
+      suggestedPhotoUrl,
+      attachmentFilename: attachment?.filename ?? null,
+      emailSent: emailed,
+    })
+    .returning({ id: inquiries.id });
+
+  if (row && attachment) {
+    const savedPath = await saveInquiryAttachment(row.id, attachment);
+    if (savedPath) {
+      await db.update(inquiries).set({ attachmentPath: savedPath }).where(eq(inquiries.id, row.id));
+    }
+  }
+
+  return { error: null, sent: true, emailed };
+}
 
 export async function submitContribution(_prev: FormState, formData: FormData): Promise<FormState> {
   const slug = text(formData.get("slug"));
@@ -39,19 +125,67 @@ export async function submitContribution(_prev: FormState, formData: FormData): 
   const sourceUrl = sourceUrlRaw ? cleanUrl(sourceUrlRaw) : null;
   if (sourceUrlRaw && !sourceUrl) return { error: "Ссылка должна начинаться с http:// или https://." };
 
-  const [estate] = await db.select({ id: estates.id }).from(estates).where(eq(estates.slug, slug)).limit(1);
+  const [estate] = await db
+    .select({ id: estates.id, name: estates.name, slug: estates.slug })
+    .from(estates)
+    .where(eq(estates.slug, slug))
+    .limit(1);
   if (!estate) return { error: "Усадьба не найдена." };
 
-  await db.insert(contributions).values({
-    estateId: estate.id,
-    predicate,
-    text: body,
-    authorName,
-    contact: contact || null,
-    sourceTitle,
-    sourcePage: sourcePage || null,
-    sourceUrl,
-  });
+  const textDisplay =
+    predicate === "condition" && isConditionId(body)
+      ? conditionLabel(body)
+      : predicate === "style" && isStyleId(body)
+        ? styleLabel(body)
+        : body;
+
+  const [row] = await db
+    .insert(contributions)
+    .values({
+      estateId: estate.id,
+      predicate,
+      text: body,
+      authorName,
+      contact: contact || null,
+      sourceTitle,
+      sourcePage: sourcePage || null,
+      sourceUrl,
+    })
+    .returning();
+
+  const editor = await isAdmin();
+
+  if (row && editor) {
+    await publishContribution(row);
+    revalidatePath(`/estates/${slug}`);
+    revalidatePath("/");
+    redirect(`/estates/${slug}?sent=1&published=1`);
+  }
+
+  if (row) {
+    const predicateRu = predicateLabel(predicate);
+    await sendContributionMail({
+      contributionId: row.id,
+      authorName,
+      contact: contact || null,
+      predicateLabel: predicateRu,
+      textDisplay,
+      estateName: estate.name,
+      estateSlug: estate.slug,
+      sourceTitle,
+      sourcePage: sourcePage || null,
+      sourceUrl,
+    });
+    if (contact && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)) {
+      await sendContributionThanksMail({
+        authorName,
+        contact,
+        estateName: estate.name,
+        estateSlug: estate.slug,
+        predicateLabel: predicateRu,
+      });
+    }
+  }
 
   redirect(`/estates/${slug}?sent=1`);
 }
@@ -61,72 +195,10 @@ export async function acceptContribution(formData: FormData) {
   const id = text(formData.get("id"));
   if (!id) redirect("/admin");
 
-  const [contribution] = await db
-    .select()
-    .from(contributions)
-    .where(and(eq(contributions.id, id), eq(contributions.status, "pending")))
-    .limit(1);
-  if (!contribution || !isPredicateId(contribution.predicate)) redirect("/admin");
+  const slug = await publishContributionById(id);
+  if (!slug) redirect("/admin");
 
-  const [estate] = await db
-    .select({ slug: estates.slug })
-    .from(estates)
-    .where(eq(estates.id, contribution.estateId))
-    .limit(1);
-
-  await db.transaction(async (tx) => {
-    const [source] = await tx
-      .insert(sources)
-      .values({
-        type: contribution.sourceUrl ? "article" : "book",
-        title: contribution.sourceTitle,
-        author: contribution.authorName,
-        page: contribution.sourcePage,
-        url: contribution.sourceUrl,
-        note: contribution.contact,
-      })
-      .returning();
-    if (!source) throw new Error("Источник не записался");
-
-    await tx.insert(statements).values({
-      estateId: contribution.estateId,
-      predicate: contribution.predicate,
-      text: contribution.text,
-      sourceId: source.id,
-      status: "accepted",
-      contributionId: contribution.id,
-    });
-
-    if (contribution.predicate === "owners") {
-      for (const name of splitOwnerNames(contribution.text)) {
-        const personId = await findOrCreatePerson(tx, name);
-        const [existing] = await tx
-          .select({ id: estatePeople.id })
-          .from(estatePeople)
-          .where(
-            and(
-              eq(estatePeople.estateId, contribution.estateId),
-              eq(estatePeople.personId, personId),
-              eq(estatePeople.role, "last_owner"),
-              eq(estatePeople.origin, "human"),
-            ),
-          )
-          .limit(1);
-        if (existing) continue;
-        await tx.insert(estatePeople).values({
-          estateId: contribution.estateId,
-          personId,
-          role: "last_owner",
-          sourceId: source.id,
-          origin: "human",
-        });
-      }
-    }
-
-    await tx.update(contributions).set({ status: "accepted" }).where(eq(contributions.id, contribution.id));
-  });
-
-  if (estate) revalidatePath(`/estates/${estate.slug}`);
+  revalidatePath(`/estates/${slug}`);
   revalidatePath("/");
   revalidatePath("/admin");
   redirect("/admin");
@@ -167,18 +239,6 @@ export async function logout() {
 
 async function assertAdmin() {
   if (!(await isAdmin())) redirect("/admin/login");
-}
-
-async function findOrCreatePerson(tx: Pick<typeof db, "select" | "insert">, name: string) {
-  const [found] = await tx
-    .select({ id: people.id })
-    .from(people)
-    .where(sql`lower(${people.name}) = ${name.toLowerCase()}`)
-    .limit(1);
-  if (found) return found.id;
-  const [created] = await tx.insert(people).values({ name }).returning({ id: people.id });
-  if (!created) throw new Error("Человек не записался");
-  return created.id;
 }
 
 function text(value: FormDataEntryValue | null) {

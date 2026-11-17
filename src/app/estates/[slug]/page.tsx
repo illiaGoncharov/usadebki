@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { BackToReel } from "@/components/BackToReel";
 import { EstateMap } from "@/components/EstateMap";
 import { PhotoGallery } from "@/components/PhotoGallery";
@@ -10,7 +10,8 @@ import { Fact } from "@/components/Fact";
 import { Frame } from "@/components/Frame";
 import { EstateHistory } from "@/components/EstateHistory";
 import { RegistryNote } from "@/components/RegistryNote";
-import { getEstate } from "@/db/queries";
+import { SupportThanksBanner } from "@/components/SupportThanksBanner";
+import { canonicalSlugFor, getEstate } from "@/db/queries";
 import { cartoKey } from "@/lib/carto";
 import { catalogHref } from "@/lib/catalog-url";
 import { estateDisplayTitle } from "@/lib/estate-display-name";
@@ -22,19 +23,19 @@ import {
   styleLabel,
 } from "@/lib/reference";
 import {
-  estateToponymStems,
-  filterPastVuGalleryPhotos,
   pastVuSearchPages,
   pastVuSearchRadiusKm,
   pickRelevantPastVuHero,
 } from "@/lib/pastvu-match";
-import { pickDiversePastVuGallery } from "@/lib/pastvu-subjects";
+import { PASTVU_GALLERY_TARGET, pickPastVuForGallery } from "@/lib/pastvu-gallery-pick";
 import { fetchNearbyHistoricalPhotosPaged } from "@/lib/pastvu";
 
 type Params = { slug: string };
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { slug } = await params;
+  const merged = await canonicalSlugFor(slug);
+  if (merged) permanentRedirect(`/estates/${merged}`);
   const estate = await getEstate(slug);
   if (!estate) return { title: "Усадьба" };
   const { title } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
@@ -46,10 +47,12 @@ export default async function EstatePage({
   searchParams,
 }: {
   params: Promise<Params>;
-  searchParams: Promise<{ sent?: string }>;
+  searchParams: Promise<{ sent?: string; published?: string }>;
 }) {
   const { slug } = await params;
-  const { sent } = await searchParams;
+  const { sent, published } = await searchParams;
+  const merged = await canonicalSlugFor(slug);
+  if (merged) permanentRedirect(`/estates/${merged}`);
   const estate = await getEstate(slug);
   if (!estate) notFound();
 
@@ -82,17 +85,16 @@ export default async function EstatePage({
       )
     : [];
   // Для любого объекта: чужое отсекаем по подписи, из оставшегося — по одному кадру на сюжет.
-  const pastvuRelevant = pickDiversePastVuGallery(filterPastVuGalleryPhotos(pastvuPhotos, pastvuContext), {
-    max: 8,
-    toponymStems: estateToponymStems(pastvuContext),
-  });
   const pastvuHero =
     estate.photos.length === 0 && hasCoords
       ? pickRelevantPastVuHero(pastvuPhotos, estate.lat!, estate.lng!, pastvuContext)
       : null;
-  const pastvuForGallery = pastvuHero
-    ? pastvuRelevant.filter((photo) => photo.cid !== pastvuHero.cid)
-    : pastvuRelevant;
+  const pastvuForGallery = hasCoords
+    ? pickPastVuForGallery(pastvuPhotos, pastvuContext, {
+        target: PASTVU_GALLERY_TARGET,
+        heroCid: pastvuHero?.cid ?? null,
+      })
+    : [];
 
   return (
     <Frame
@@ -105,7 +107,13 @@ export default async function EstatePage({
       left={
         <div className="prose">
           {sent === "1" ? (
-            <p className="banner">Правка отправлена. На карточке она появится после проверки.</p>
+            <SupportThanksBanner
+              detail={
+                published === "1"
+                  ? "Правка сразу опубликована на карточке (режим редактора)."
+                  : "Правка отправлена. На карточке она появится после проверки."
+              }
+            />
           ) : null}
           <p className="kicker">История</p>
           <EstateHistory
@@ -153,7 +161,17 @@ export default async function EstatePage({
       center={
         <article>
           {estate.photos.length > 0 ? (
-            <PhotoGallery name={displayName} photos={estate.photos} />
+            <>
+              <PhotoGallery name={displayName} photos={estate.photos} />
+              <p className="caption">
+                <a
+                  className="text-link"
+                  href={`/feedback?topic=photo&slug=${encodeURIComponent(estate.slug)}&name=${encodeURIComponent(displayName)}`}
+                >
+                  Не то здание на снимке
+                </a>
+              </p>
+            </>
           ) : pastvuHero ? (
             <PastVuHeroPlaceholder photo={pastvuHero} estateName={displayName} />
           ) : (
@@ -179,7 +197,9 @@ export default async function EstatePage({
           {estate.parts.length === 0 ? (
             <p className="muted">
               {estate.objectType === "Ансамбль"
-                ? "В реестре ансамбль пока не разложен на отдельные объекты."
+                ? estate.registryDuplicates.length > 0
+                  ? "Отдельные строения в состав ансамбля в базе пока не привязаны. В ЕГРОКН на один объект заведено несколько паспортов — они перечислены справа, это не список зданий."
+                  : "В реестре ансамбль пока не разложен на отдельные объекты."
                 : "В реестре это отдельный объект, не ансамбль."}
             </p>
           ) : (
@@ -195,7 +215,7 @@ export default async function EstatePage({
           {estate.ensemblePhotos && estate.ensemblePhotos.length > 0 ? (
             <EnsemblePartsGallery photos={estate.ensemblePhotos} parts={estate.parts} />
           ) : null}
-          {hasCoords && pastvuPhotos.length > 0 ? (
+          {hasCoords && pastvuForGallery.length > 0 ? (
             <PastVuGallery
               lat={estate.lat!}
               lng={estate.lng!}
@@ -208,7 +228,15 @@ export default async function EstatePage({
       }
       right={
         <div>
-          <Fact label="Владельцы">
+          <Fact
+            label={
+              <>
+                Владельцы
+                <br />
+                до 1917
+              </>
+            }
+          >
             {owners.length > 0 ? (
               <ul className="plain">
                 {owners.map((person) => (
@@ -257,7 +285,21 @@ export default async function EstatePage({
               уточнить
             </a>
           </Fact>
-          <Fact label="Реестр">{estate.egrknRegNumber}</Fact>
+          <Fact label="Реестр">
+            <div>
+              <div>{estate.egrknRegNumber}</div>
+              {estate.registryDuplicates.length > 0 ? (
+                <>
+                  <p className="fact__hint">Повторные паспорта ЕГРОКН (тот же объект):</p>
+                  <ul className="plain">
+                    {estate.registryDuplicates.map((reg) => (
+                      <li key={reg}>{reg}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+            </div>
+          </Fact>
           {estate.notes.length > 0 ? (
             <Fact label="Заметки">
               {estate.notes.map((note) => (

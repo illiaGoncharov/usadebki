@@ -1,0 +1,2 @@
+ALTER TABLE "estates" ADD COLUMN "canonical_estate_id" uuid;--> statement-breakpoint
+ALTER TABLE "estates" ADD CONSTRAINT "estates_canonical_estate_id_estates_id_fk" FOREIGN KEY ("canonical_estate_id") REFERENCES "public"."estates"("id") ON DELETE set null ON UPDATE no action;

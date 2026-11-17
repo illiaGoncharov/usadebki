@@ -1,0 +1,1 @@
+ALTER TABLE "estates" ADD COLUMN "wiki_condition" text;

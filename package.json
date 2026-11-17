@@ -18,10 +18,17 @@
     "import:egrkn": "node --env-file=.env --import tsx scripts/import-egrkn.ts",
     "enrich:mo": "node --env-file=.env --import tsx scripts/enrich-wikidata.ts",
     "enrich:all": "node --env-file=.env --import tsx scripts/enrich-all-sources.ts",
+    "enrich:conditions": "node --env-file=.env --import tsx scripts/enrich-conditions.ts",
     "enrich:stats": "node --env-file=.env --import tsx scripts/enrich-coverage-stats.ts",
+    "conditions:test": "node --import tsx scripts/test-condition-match.ts",
     "photos:audit": "node --env-file=.env --import tsx scripts/audit-photos.ts",
     "photos:test": "node --import tsx scripts/test-photo-match.ts",
-    "pastvu:test": "node --import tsx scripts/test-pastvu-match.ts"
+    "photos:fill-category": "node --env-file=.env --import tsx scripts/photos-fill-category.ts",
+    "mail:test": "node --env-file=.env --import tsx scripts/test-resend.ts",
+    "dedupe:estates": "node --env-file=.env --import tsx scripts/dedupe-estates.ts",
+    "dedupe:test": "node --import tsx scripts/test-estate-dedupe.ts",
+    "pastvu:test": "node --import tsx scripts/test-pastvu-match.ts",
+    "pastvu:gallery": "node --env-file=.env --import tsx scripts/pastvu-gallery-fill.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",

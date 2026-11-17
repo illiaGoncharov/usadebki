@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   boolean,
   doublePrecision,
   index,
@@ -43,6 +44,12 @@ export const estates = pgTable(
     wikiStyle: text("wiki_style"),
     // Все стили, которые Wikidata или вступление Википедии назвали у этой усадьбы.
     wikiStyles: text("wiki_styles").array(),
+    // Состояние из обогащения (Википедия / Wikidata). Правка в statements важнее.
+    wikiCondition: text("wiki_condition"),
+    // Дубль паспорта ЕГРОКН → не показываем в ленте, редирект на каноническую карточку.
+    canonicalEstateId: uuid("canonical_estate_id").references((): AnyPgColumn => estates.id, {
+      onDelete: "set null",
+    }),
     rawJson: jsonb("raw_json"),
     importedAt: timestamp("imported_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -52,6 +59,7 @@ export const estates = pgTable(
     uniqueIndex("estates_reg_idx").on(table.egrknRegNumber),
     index("estates_region_idx").on(table.regionId),
     index("estates_native_idx").on(table.egrknNativeId),
+    index("estates_canonical_idx").on(table.canonicalEstateId),
   ],
 );
 
@@ -162,6 +170,26 @@ export const contributions = pgTable(
     index("contributions_status_idx").on(table.status),
     index("contributions_estate_idx").on(table.estateId),
   ],
+);
+
+export const inquiries = pgTable(
+  "inquiries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    topic: text("topic").notNull(),
+    estateSlug: text("estate_slug"),
+    estateName: text("estate_name"),
+    message: text("message").notNull(),
+    authorName: text("author_name").notNull(),
+    contact: text("contact"),
+    pageUrl: text("page_url"),
+    suggestedPhotoUrl: text("suggested_photo_url"),
+    attachmentFilename: text("attachment_filename"),
+    attachmentPath: text("attachment_path"),
+    emailSent: boolean("email_sent").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("inquiries_created_idx").on(table.createdAt)],
 );
 
 export const statements = pgTable(

@@ -15,6 +15,34 @@
       "when": 1794901073198,
       "tag": "0001_oval_night_thrasher",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794949498714,
+      "tag": "0002_wide_genesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794955769419,
+      "tag": "0003_quick_umar",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794956104307,
+      "tag": "0004_stale_smiling_tiger",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794957435233,
+      "tag": "0005_exotic_nocturne",
+      "breakpoints": true
     }
   ]
 }

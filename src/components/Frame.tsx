@@ -22,6 +22,8 @@ export function Frame({
       <div className="shell__head shell__crumb">{crumb}</div>
       <div className="shell__head shell__head-right">
         <Link href="/about">О проекте</Link>
+        {" · "}
+        <Link href="/feedback">Написать нам</Link>
       </div>
       <div className="shell__col">{left}</div>
       <div className={`shell__col${centerFlush ? " shell__col--flush" : ""}`}>{center}</div>

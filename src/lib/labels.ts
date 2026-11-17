@@ -9,9 +9,22 @@ export const CONDITIONS = [
 
 export type ConditionId = (typeof CONDITIONS)[number]["id"];
 
+/** Состояния, которые в каталоге сворачиваются в фильтр «плохое» */
+export const POOR_CONDITION_IDS = ["lost", "ruins", "neglect"] as const satisfies readonly ConditionId[];
+
+const poorConditionSet = new Set<string>(POOR_CONDITION_IDS);
+
+export function isPoorConditionId(id: string) {
+  return poorConditionSet.has(id);
+}
+
+export function isPoorConditionFilter(value: string | undefined) {
+  return value === "poor" || (value != null && isPoorConditionId(value));
+}
+
 export const PREDICATES = [
   { id: "condition", label: "состояние" },
-  { id: "owners", label: "владельцы" },
+  { id: "owners", label: "владельцы до 1917" },
   { id: "year", label: "даты" },
   { id: "style", label: "стиль" },
   { id: "note", label: "заметка" },

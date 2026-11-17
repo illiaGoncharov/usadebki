@@ -18,6 +18,11 @@ const DRIZZLE_BASELINE = [
     hash: "9467d0a0f6662bdd3bc6012a560ac2ac695eb711dad044a2283a987c5e33f912",
     created_at: 1794901073198,
   },
+  {
+    id: 3,
+    hash: "dd1306e9d6de9d8bb353aba7700178f7f7a78efed3f4871fe4c7d7ea26a868b1",
+    created_at: 1794911796563,
+  },
 ] as const;
 
 async function main() {
@@ -66,11 +71,25 @@ async function main() {
       process.exit(1);
     }
 
+    const [{ count: conditionCol }] = await sql<{ count: string }[]>`
+      select count(*)::text as count
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'estates'
+        and column_name = 'wiki_condition'
+    `;
+    if (Number(conditionCol) === 0) {
+      console.error(
+        "На Neon нет estates.wiki_condition — фильтр «состояние» на бете пустой. npm run db:migrate:neon или beta:publish с дампом после миграции.",
+      );
+      process.exit(1);
+    }
+
     const [{ count: journalCount }] = await sql<{ count: string }[]>`
       select count(*)::text as count from drizzle.__drizzle_migrations
     `;
     if (Number(journalCount) === 0) {
-      console.log("Журнал drizzle пуст — записываем baseline миграций 0000 и 0001.");
+      console.log("Журнал drizzle пуст — записываем baseline миграций 0000–0002.");
       for (const row of DRIZZLE_BASELINE) {
         await sql`
           insert into drizzle.__drizzle_migrations (id, hash, created_at)

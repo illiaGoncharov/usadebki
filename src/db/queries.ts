@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { PHOTO_KIND_SQL, photoFileKey, photoKind, photoRank } from "@/lib/photo";
+import { PHOTO_KIND_SQL, photoFileKey, photoKind, photoRank, pickHeroPhoto } from "@/lib/photo";
 import { AGGLOMERATIONS } from "@/lib/reference";
 import { placeFromAddress } from "@/lib/search";
 import { db, sql as pg } from "./index";
@@ -15,6 +15,9 @@ import {
 } from "./schema";
 
 const PAGE_SIZE = 12;
+
+/** В ленте и поиске только канонические карточки (не дубли паспорта ЕГРОКН). */
+const VISIBLE_ESTATE = sql`canonical_estate_id is null`;
 
 let photoKindReady: Promise<void> | null = null;
 
@@ -57,6 +60,7 @@ export async function listRegions() {
            region_name as "regionName",
            count(*)::int as count
     from estates
+    where ${VISIBLE_ESTATE}
     group by region_id, region_name
     order by count(*) desc, region_name
   `);
@@ -126,7 +130,7 @@ export async function listEstates(options: {
            e.wikipedia_title as "wikipediaTitle",
            e.lat,
            e.lng,
-           coalesce(s.text, 'unknown') as condition,
+           coalesce(s.text, e.wiki_condition, 'unknown') as condition,
            coalesce(st.text, e.wiki_style) as style,
            case
              when st.text is not null then array[st.text]
@@ -180,6 +184,7 @@ export async function listEstates(options: {
       order by km
       limit 1
     ) n on true
+    where e.canonical_estate_id is null
   `;
   const regionSql = regionIds
     ? sql`e."regionId" in (${sql.join(
@@ -206,12 +211,14 @@ export async function listEstates(options: {
             where anchor.address ilike ${q}
               and anchor.region_name not ilike ${q}
               and anchor.lat is not null
+              and anchor.canonical_estate_id is null
           ) between 1 and 40
           and exists (
             select 1
             from estates anchor
             where anchor.address ilike ${q}
               and anchor.region_name not ilike ${q}
+              and anchor.canonical_estate_id is null
               and anchor.lat is not null
               and (
                 6371 * 2 * asin(least(1::float8, sqrt(
@@ -320,19 +327,41 @@ async function featuredInRegion(regionId: string | null) {
       order by (photo_kind(url) >= 3), is_primary desc, photo_kind(url)
       limit 1
     ) p on true
-    where (${regionId}::text is null or e.region_id = ${regionId})
+    where e.canonical_estate_id is null
+      and (${regionId}::text is null or e.region_id = ${regionId})
     order by (p.url is not null) desc, (e.summary is not null) desc, e.name
     limit 1
   `);
   return asRows<FeaturedEstate>(result)[0] ?? null;
 }
 
+/** Если slug — дубль паспорта, вернуть канонический slug для редиректа. */
+export async function canonicalSlugFor(slug: string): Promise<string | null> {
+  const [row] = await db
+    .select({ canonicalId: estates.canonicalEstateId })
+    .from(estates)
+    .where(eq(estates.slug, slug))
+    .limit(1);
+  if (!row?.canonicalId) return null;
+  const [canon] = await db
+    .select({ slug: estates.slug })
+    .from(estates)
+    .where(eq(estates.id, row.canonicalId))
+    .limit(1);
+  return canon?.slug ?? null;
+}
+
 export async function getEstate(slug: string) {
   const [estate] = await db.select().from(estates).where(eq(estates.slug, slug)).limit(1);
   if (!estate) return null;
 
-  const [parts, photoRows, ensemblePhotoRows, links, statementRows] = await Promise.all([
+  const [parts, aliasRows, photoRows, ensemblePhotoRows, links, statementRows] = await Promise.all([
     db.select().from(estateParts).where(eq(estateParts.estateId, estate.id)),
+    db
+      .select({ reg: estates.egrknRegNumber })
+      .from(estates)
+      .where(eq(estates.canonicalEstateId, estate.id))
+      .orderBy(estates.egrknRegNumber),
     db.select().from(photos).where(and(
       eq(photos.estateId, estate.id),
       eq(photos.isHidden, false),
@@ -401,23 +430,21 @@ export async function getEstate(slug: string) {
 
   const roleOrder = (role: string) => (role === "last_owner" ? 0 : role === "owner" ? 1 : 2);
 
-  const primaryPhotos = photoRows.filter((row) => row.isPrimary);
-  const dedupedPrimary = new Map<string, (typeof photoRows)[number]>();
-  for (const row of primaryPhotos) {
+  const deduped = new Map<string, (typeof photoRows)[number]>();
+  for (const row of photoRows) {
     const key = photoFileKey(row.url);
-    const existing = dedupedPrimary.get(key);
-    if (!existing || (!existing.isPrimary && row.isPrimary)) dedupedPrimary.set(key, row);
+    const existing = deduped.get(key);
+    if (!existing || (!existing.isPrimary && row.isPrimary)) deduped.set(key, row);
   }
-  const galleryPhotos = [...dedupedPrimary.values()]
-    .sort(
-      (a, b) =>
-        photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)) ||
-        a.url.localeCompare(b.url, "ru"),
-    )
-    .slice(0, 1);
+  const galleryPhotos = pickHeroPhoto([...deduped.values()]);
+
+  const registryDuplicates = aliasRows.map((row) => row.reg).filter((reg) => reg !== estate.egrknRegNumber);
+  const registryNumbers = [estate.egrknRegNumber, ...registryDuplicates];
 
   return {
     ...estate,
+    registryNumbers,
+    registryDuplicates,
     parts: parts.sort((a, b) => a.name.localeCompare(b.name, "ru")),
     photos: galleryPhotos,
     ensemblePhotos: ensemblePhotoRows.sort(
@@ -431,7 +458,7 @@ export async function getEstate(slug: string) {
         years: link.years,
       }))
       .sort((a, b) => roleOrder(a.role) - roleOrder(b.role) || a.name.localeCompare(b.name, "ru")),
-    condition: latestCondition?.text ?? "unknown",
+    condition: latestCondition?.text ?? estate.wikiCondition ?? "unknown",
     style: latestStyle?.text ?? estate.wikiStyle ?? null,
     styleIds: latestStyle?.text
       ? [latestStyle.text]
@@ -478,11 +505,13 @@ export async function mapOverview() {
     select slug, name, region_name as "regionName", lat, lng
     from estates
     where lat is not null and lng is not null
+      and ${VISIBLE_ESTATE}
   `);
   const totals = await db.execute<{ total: number; mapped: number }>(sql`
     select count(*)::int as total,
            count(*) filter (where lat is not null and lng is not null)::int as mapped
     from estates
+    where ${VISIBLE_ESTATE}
   `);
   const totalRow = asRows<{ total: number; mapped: number }>(totals)[0];
   return {
@@ -514,7 +543,8 @@ export async function suggestCatalog(query: string) {
              address,
              region_name as "regionName"
       from estates
-      where translate(name, '—–', '--') ilike translate(${like}, '—–', '--')
+      where canonical_estate_id is null
+        and translate(name, '—–', '--') ilike translate(${like}, '—–', '--')
          or translate(wikipedia_title, '—–', '--') ilike translate(${like}, '—–', '--')
          or translate(summary, '—–', '--') ilike translate(${like}, '—–', '--')
          or (address ilike ${like} and region_name not ilike ${like})
@@ -533,7 +563,8 @@ export async function suggestCatalog(query: string) {
     db.execute<{ address: string; regionName: string }>(sql`
       select address, region_name as "regionName"
       from estates
-      where address ilike ${like}
+      where canonical_estate_id is null
+        and address ilike ${like}
         and region_name not ilike ${like}
       limit 80
     `),

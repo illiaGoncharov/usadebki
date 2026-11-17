@@ -6,6 +6,7 @@
  *
  * Модуль чистый: без сети и БД. Описания файлов приносит scripts/audit-photos.ts.
  */
+import { estateNameStems, filenameMatchesEstate } from "./estate-stems";
 import { decodePhotoName, MAIN_WORDS, PART_WORDS, photoKind, SCENE_WORDS } from "./photo";
 
 export type BuildingRole = "main" | "part" | "unknown";
@@ -239,27 +240,41 @@ export function judgePhoto(estate: EstateFacts, photo: PhotoFacts): Verdict {
   }
 
   const nameTokens = nameTokensIn(estate.name, text);
+  const fileNameHit = filenameMatchesEstate(photo.filename, estateNameStems(estate.name));
   const evidence: string[] = [];
   if (geo.state === "near") evidence.push(`геометка в ${Math.round(geo.meters ?? 0)} м`);
   if (address === "match-structure") evidence.push("адрес и строение совпали");
   else if (address === "match") evidence.push("адрес совпал");
   if (nameTokens.length > 0) evidence.push("название в описании");
+  if (fileNameHit) evidence.push("название в имени файла");
 
   const score =
     SOURCE_SCORE[photo.source] +
     (role === "main" ? 30 : 0) +
     (address === "match-structure" ? 20 : address === "match" ? 10 : 0) +
     (geo.state === "near" ? 15 : 0) +
-    (nameTokens.length > 0 ? 5 : 0);
+    (nameTokens.length > 0 ? 5 : 0) +
+    (fileNameHit ? 8 : 0) +
+    (fileNameHit && kind === "house" ? 12 : 0);
 
+  // У ансамбля P18 часто ведёт на сад/вид/аллею, а не на дом — не делаем такое фото главным.
+  if (trusted && ensemble && expected === "main" && (kind === "place" || scene)) {
+    return verdict("part", "официальный снимок объекта — пейзаж, парк или аллея, не здание");
+  }
   if (trusted) return verdict("main", "снимок привязан к объекту источником", score);
 
   // Дальше только снимки из категорий Commons. Категория может оказаться районной, поэтому сама по себе не доказательство.
   if (evidence.length === 0) {
     return verdict("hide", "нет подтверждения: ни геометки рядом, ни адреса, ни названия объекта в описании");
   }
-  if (ensemble && role !== "main") {
-    return verdict("hide", "у ансамбля нет подтверждения, что на снимке главное здание");
+  if (ensemble && role !== "main" && kind !== "house") {
+    const toponymHit = nameTokensIn(estate.name, text).length > 0 || fileNameHit;
+    if (!toponymHit) {
+      return verdict("hide", "у ансамбля нет подтверждения, что на снимке главное здание");
+    }
+    if (kind === "part" || kind === "place" || scene) {
+      return verdict("part", "пейзаж или постройка ансамбля, не главный дом");
+    }
   }
   return verdict("main", `подтверждено: ${evidence.join(", ")}`, score);
 }

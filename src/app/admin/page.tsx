@@ -20,7 +20,7 @@ export default async function AdminPage() {
         <div className="prose">
           <p className="kicker">Очередь</p>
           <p>Принятая правка становится утверждением со ссылкой на источник. Реестровые поля при этом не меняются.</p>
-          <p>Владельцы из правки попадают в список людей как последние владельцы.</p>
+          <p>Имена из правки попадают в карточку как владельцы до 1917.</p>
           <form action={logout}>
             <button className="text-button" type="submit">
               Выйти

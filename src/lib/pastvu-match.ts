@@ -135,6 +135,7 @@ export function streetNamesFromEstateAddress(address: string | null | undefined)
  * Почтамт — тоже ансамбль, но компактный, и соседние кадры там как раз опасны.
  */
 export function isWideEstatePastVu(ctx: PastVuEstateContext) {
+  if (ctx.objectType === "Ансамбль") return true;
   const refs = addressRefs(ctx.address);
   return refs.houses.length >= 5 || (ctx.address?.length ?? 0) >= 100;
 }

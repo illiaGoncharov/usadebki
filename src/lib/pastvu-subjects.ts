@@ -80,15 +80,26 @@ export function pickDiversePastVuGallery(
   if (picked.length < minTiles) {
     for (const list of ordered) {
       if (picked.length >= Math.min(minTiles, max)) break;
-      if (list.length < 3) continue;
+      if (list.length < 2) continue;
       const first = list[0]!;
-      // Второй кадр сюжета — с самой далёкой по времени датой, чтобы не повторять тот же год.
-      const other = [...list.slice(1)].sort(
+      const extras = [...list.slice(1)].sort(
         (a, b) => Math.abs(photoYear(b) - photoYear(first)) - Math.abs(photoYear(a) - photoYear(first)),
-      )[0];
-      if (other) picked.push(other);
+      );
+      for (const other of extras) {
+        if (picked.length >= Math.min(minTiles, max)) break;
+        if (picked.some((p) => p.cid === other.cid)) continue;
+        picked.push(other);
+      }
     }
   }
 
-  return picked;
+  if (picked.length < minTiles) {
+    const flat = ordered.flat().filter((p) => !picked.some((x) => x.cid === p.cid));
+    for (const photo of flat) {
+      if (picked.length >= Math.min(minTiles, max)) break;
+      picked.push(photo);
+    }
+  }
+
+  return picked.slice(0, max);
 }

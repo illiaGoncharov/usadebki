@@ -114,9 +114,33 @@ export function photoFileKey(value: string) {
 
 function isPlace(name: string) {
   return (
-    /(^|[^a-z])(park|garden)([^a-z]|$)/i.test(name) ||
-    /(^|[^а-яё])(парк|пруд|фонтан|алле|клумб|грот)/i.test(name) ||
+    /(^|[^a-z])(park|garden|orchard)([^a-z]|$)/i.test(name) ||
+    /(^|[^а-яё])(парк|пруд|фонтан|алле|клумб|грот|садов)/i.test(name) ||
     /(^|[^а-яё])сад([^а-яё]|$)/i.test(name)
+  );
+}
+
+/** Одно лучшее фото для шапки карточки и ленты — та же логика, что в listEstates (SQL). */
+export function pickHeroPhoto<T extends { url: string; isPrimary: boolean }>(rows: T[]): T[] {
+  if (rows.length === 0) return [];
+  const sorted = [...rows].sort((a, b) => {
+    const rankA = photoRank(photoKind(a.url));
+    const rankB = photoRank(photoKind(b.url));
+    const deprioritizeA = rankA >= 3 ? 1 : 0;
+    const deprioritizeB = rankB >= 3 ? 1 : 0;
+    if (deprioritizeA !== deprioritizeB) return deprioritizeA - deprioritizeB;
+    if (Number(b.isPrimary) !== Number(a.isPrimary)) return Number(b.isPrimary) - Number(a.isPrimary);
+    return rankA - rankB || a.url.localeCompare(b.url, "ru");
+  });
+  return [sorted[0]!];
+}
+
+/** Парк, аллея, лестница в лесопарке — не главный дом, даже если в подписи есть «усадьба». */
+function isParkView(name: string) {
+  return (
+    /лесопарк|лесопарке|берёзов\S*\s+алле|березов\S*\s+алле|алле[яию]\b/.test(name) ||
+    /(^|[^а-яё])лестниц/.test(name) ||
+    /(^|[^a-z])(park|garden|orchard)([^a-z]|$)/i.test(name)
   );
 }
 
@@ -126,10 +150,14 @@ export function photoKind(value: string): PhotoKind {
   if (PART_WORDS.some((word) => name.includes(word)) && !MAIN_WORDS.some((word) => name.includes(word))) {
     return "part";
   }
+  if (isParkView(name) && !MAIN_WORDS.some((word) => name.includes(word))) {
+    return "place";
+  }
+  if (/map\.(jpe?g|png|webp)$/i.test(name)) return "place";
   // Сначала ищем здание: иначе «Estate - panoramio» уходит в сцену и пропадает из ленты.
   if (HOUSE.some((word) => name.includes(word))) return "house";
   if (SCENE.some((word) => name.includes(word))) return "scene";
-  if (isPlace(name)) return "place";
+  if (isPlace(name) || /\bmap\b|\.plan\.|план\b|схема/i.test(name)) return "place";
   return "other";
 }
 
@@ -189,6 +217,11 @@ begin
   if (${PART_WORDS.map((word) => `position(${quotePhotoWord(word)} in name) > 0`).join(" or ")})
      and not (${MAIN_WORDS.map((word) => `position(${quotePhotoWord(word)} in name) > 0`).join(" or ")}) then
     return 3;
+  end if;
+  if name ~ 'лесопарк|лесопарке|бер[её]зов\S*\s+алле|алле[яию]'
+     or name ~ '(^|[^а-яё])лестниц'
+     and not (${MAIN_WORDS.map((word) => `position(${quotePhotoWord(word)} in name) > 0`).join(" or ")}) then
+    return 2;
   end if;
   if ${HOUSE.map((word) => `position(${quotePhotoWord(word)} in name) > 0`).join(" or ")} then
     return 0;

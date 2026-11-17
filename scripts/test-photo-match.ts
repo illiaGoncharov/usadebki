@@ -201,6 +201,27 @@ check("флигель больше не считается «домом»", () =
 });
 check("главный корпус остаётся «домом»", () => {
   assert.equal(photoKind("Главный дом усадьбы Х.jpg"), "house");
+  assert.equal(photoKind("Tula YasnayaPolyana asv2019-09 img04 orchard.jpg"), "place");
+  assert.equal(photoKind("Березовая аллея в усадьбе Богословка Невского лесопарка.jpg"), "place");
+  assert.equal(photoKind("Невский лесопарк. Лестница.jpg"), "place");
+  assert.equal(photoKind("Bogoslovka Estate, wooden gable and icon.jpg"), "house");
+  assert.equal(photoKind("Bogoslovkamap.jpg"), "place");
+});
+
+const BOGO: EstateFacts = {
+  name: "Ансамбль дачи Зиновьева (усадьба Богословка XVIII — XIX вв.)",
+  address: null,
+  objectType: "Ансамбль",
+  partsCount: 0,
+};
+check("Богословка: фасад по латинскому имени файла — главное", () => {
+  assert.equal(
+    judgePhoto(BOGO, { filename: "Bogoslovka Estate, wooden gable and icon.jpg", source: "none" }).decision,
+    "main",
+  );
+});
+check("Богословка: карта — часть ансамбля, не шапка", () => {
+  assert.equal(judgePhoto(BOGO, { filename: "Bogoslovkamap.jpg", source: "none" }).decision, "part");
 });
 check("описание «флигель главного дома» — флигель", () => {
   assert.equal(photoRole("x.jpg", "Флигель главного дома"), "part");

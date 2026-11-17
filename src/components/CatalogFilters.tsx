@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { RegionRow } from "@/db/queries";
-import { CONDITIONS } from "@/lib/labels";
+import { CONDITIONS, isPoorConditionFilter, isPoorConditionId } from "@/lib/labels";
 import type { CatalogLink } from "@/lib/catalog-url";
 import {
   DISTANCES,
@@ -31,7 +31,9 @@ export function CatalogFilters({
     ERAS.find((item) => item.id === value.era)?.label,
     RANKS.find((item) => item.id === value.rank)?.label,
     KINDS.find((item) => item.id === value.kind)?.label,
-    value.condition === "poor" ? "плохое состояние" : CONDITIONS.find((item) => item.id === value.condition)?.label,
+    isPoorConditionFilter(value.condition)
+      ? "плохое состояние"
+      : CONDITIONS.find((item) => item.id === value.condition)?.label,
     value.style === "unknown" ? "стиль не указан" : STYLES.find((item) => item.id === value.style)?.label,
     DISTANCES.find((item) => item.id === value.distance)?.label,
   ].filter((item): item is string => Boolean(item));
@@ -119,14 +121,21 @@ export function CatalogFilters({
         </label>
         <label className="filter-field">
           <span>Состояние</span>
-          <select name="condition" defaultValue={value.condition ?? ""}>
+          <select
+            name="condition"
+            defaultValue={
+              value.condition && isPoorConditionId(value.condition) ? "poor" : value.condition ?? ""
+            }
+          >
             <option value="">Все</option>
             <option value="poor">плохое: руины, запустение, утрата</option>
-            {CONDITIONS.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
+            {CONDITIONS.filter((item) => !isPoorConditionId(item.id)).map(
+              (item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ),
+            )}
           </select>
         </label>
         <label className="filter-field">

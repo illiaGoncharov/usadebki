@@ -20,6 +20,11 @@ import { estatePeople, estates, estateParts, people, photos, sources } from "../
 import { photoKind, photoRank } from "../src/lib/photo";
 import { stylesFromText, wikiStyleIds } from "../src/lib/reference";
 import { extractEgrknPassportData, generateReferenceText } from "./sources/egrkn-photos";
+import {
+  estateNameStems,
+  fetchCommonsCategoryFiles,
+  filenameMatchesEstate,
+} from "./sources/commons-category";
 import { fetchWikivoyageHeritage } from "./sources/wikivoyage";
 
 const USER_AGENT = "Usadebki/0.1 (local estate catalog; research)";
@@ -406,9 +411,10 @@ async function enrichFromEnsembleParts() {
  */
 async function fillMorePhotos() {
   const rows = await db
-    .select({ id: estates.id, reg: estates.egrknRegNumber })
+    .select({ id: estates.id, reg: estates.egrknRegNumber, name: estates.name })
     .from(estates);
-  
+
+  const categoryCache = new Map<string, string[]>();
   const byReg = new Map(rows.map((row) => [row.reg, row]));
   const bags = new Map<string, { files: string[]; category: string | null }>();
   
@@ -448,15 +454,32 @@ async function fillMorePhotos() {
     if (room <= 0) continue;
     const hadPhoto = known.size > 0;
     
-    // ТОЛЬКО прямые P18 фото из Wikidata, НЕ берём все из категории
-    // (категория может быть для ансамбля и содержать фото других объектов)
     const names = bag.files.flatMap((item) => {
       const file = commonsFile(item);
       return file ? [file.filename] : [];
     });
 
-    // УДАЛЕНО: categoryFiles(bag.category) - это небезопасно!
-    // Если нужны фото из категории, они должны быть отфильтрованы по depicts/coordinates
+    const p18BestRank = names.length ? Math.min(...names.map((n) => photoRank(photoKind(n)))) : 99;
+  // Если в P18 только парк/аллея — добираем здание из узкой категории P373 (≤15 файлов).
+    if (bag.category && p18BestRank >= photoRank("place")) {
+      let catFiles = categoryCache.get(bag.category);
+      if (!catFiles) {
+        catFiles = await fetchCommonsCategoryFiles(bag.category);
+        categoryCache.set(bag.category, catFiles);
+        await sleep(80);
+      }
+      if (catFiles.length > 0 && catFiles.length <= 15) {
+        const stems = estateNameStems(estate.name);
+        for (const filename of catFiles) {
+          if (!isEstatePhoto(filename)) continue;
+          const kind = photoKind(filename);
+          if (kind !== "house" && kind !== "other") continue;
+          if (catFiles.length <= 12 || filenameMatchesEstate(filename, stems)) {
+            if (!names.includes(filename)) names.push(filename);
+          }
+        }
+      }
+    }
 
     const ranked = [...names]
       .filter(isEstatePhoto)
