@@ -1,3 +1,4 @@
+import { mergeRegistryNoteIntoHistory } from "@/lib/estate-display-name";
 import { wikipediaIntro } from "@/lib/wikipedia";
 import { styleLabel } from "@/lib/reference";
 
@@ -8,6 +9,7 @@ type Props = {
   summarySource: string | null;
   wikipediaTitle: string | null;
   wikipediaUrl: string | null;
+  registryNameNote: string | null;
   architects: Person[];
   styleIds: string[];
   createdDateText: string | null;
@@ -22,6 +24,7 @@ export async function EstateHistory({
   summarySource,
   wikipediaTitle,
   wikipediaUrl,
+  registryNameNote,
   architects,
   styleIds,
   createdDateText,
@@ -35,6 +38,11 @@ export async function EstateHistory({
     const intro = await wikipediaIntro(wikipediaTitle);
     if (intro && intro.length > body.length) body = intro;
   }
+
+  const bodyBeforeRegistry = body;
+  body = mergeRegistryNoteIntoHistory(body, registryNameNote);
+  const addedRegistryTail =
+    Boolean(registryNameNote?.trim()) && body.length > bodyBeforeRegistry.trim().length + 12;
 
   const styles = styleIds.map((id) => styleLabel(id)).filter(Boolean);
   const architectNames = architects.map((p) => p.name).filter(Boolean);
@@ -56,8 +64,20 @@ export async function EstateHistory({
             <p className="caption" style={{ marginBottom: "0.35rem" }}>
               Справка из паспорта реестра (не полная история)
             </p>
+          ) : addedRegistryTail && fromWiki ? (
+            <p className="caption" style={{ marginBottom: "0.35rem" }}>
+              В начале — уточнения из наименования в реестре, ниже — статья Википедии
+            </p>
+          ) : addedRegistryTail ? (
+            <p className="caption" style={{ marginBottom: "0.35rem" }}>
+              Из наименования в реестре
+            </p>
           ) : null}
-          <p>{body}</p>
+          {body.includes("\n\n") ? (
+            body.split("\n\n").map((paragraph, index) => <p key={index}>{paragraph}</p>)
+          ) : (
+            <p>{body}</p>
+          )}
         </>
       ) : (
         <p>

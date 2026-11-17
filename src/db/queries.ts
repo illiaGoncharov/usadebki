@@ -29,6 +29,7 @@ function ensurePhotoKind() {
 export type CatalogRow = {
   slug: string;
   name: string;
+  wikipediaTitle: string | null;
   regionId: string;
   regionName: string;
   address: string | null;
@@ -252,7 +253,7 @@ export async function listEstates(options: {
   `;
   const [rowsResult, countResult] = await Promise.all([
     db.execute<CatalogRow & { era_year: number | null }>(sql`
-      select slug, name, "regionId", "regionName", address, category, "objectType",
+      select slug, name, "wikipediaTitle", "regionId", "regionName", address, category, "objectType",
              "createdDateText", summary, condition, style, "styleIds", "photoUrl", km, city
       from (${base}) e
       ${where}

@@ -12,6 +12,7 @@ import { RegistryNote } from "@/components/RegistryNote";
 import { getEstate } from "@/db/queries";
 import { cartoKey } from "@/lib/carto";
 import { catalogHref } from "@/lib/catalog-url";
+import { estateDisplayTitle } from "@/lib/estate-display-name";
 import { conditionLabel, roleLabel } from "@/lib/labels";
 import { guberniaByRegion, nearestAgglomeration, styleLabel } from "@/lib/reference";
 
@@ -20,7 +21,9 @@ type Params = { slug: string };
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { slug } = await params;
   const estate = await getEstate(slug);
-  return { title: estate?.name ?? "Усадьба" };
+  if (!estate) return { title: "Усадьба" };
+  const { title } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
+  return { title };
 }
 
 export default async function EstatePage({
@@ -34,6 +37,8 @@ export default async function EstatePage({
   const { sent } = await searchParams;
   const estate = await getEstate(slug);
   if (!estate) notFound();
+
+  const { title: displayName, registryNote } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
 
   const owners = estate.people.filter((person) => person.role !== "architect");
   const architects = estate.people.filter((person) => person.role === "architect");
@@ -62,6 +67,7 @@ export default async function EstatePage({
             summarySource={estate.summarySource}
             wikipediaTitle={estate.wikipediaTitle}
             wikipediaUrl={estate.wikipediaUrl}
+            registryNameNote={registryNote}
             architects={architects}
             styleIds={estate.styleIds}
             createdDateText={estate.createdDateText}
@@ -106,12 +112,12 @@ export default async function EstatePage({
               <p className="caption">Снимок ещё не привязан</p>
             </>
           ) : (
-            <PhotoGallery name={estate.name} photos={estate.photos} />
+            <PhotoGallery name={displayName} photos={estate.photos} />
           )}
           <p className="kicker">
             {estate.objectType ?? "Объект"} · {estate.regionName}
           </p>
-          <h1>{estate.name}</h1>
+          <h1>{displayName}</h1>
           {estate.address ? <p className="muted">{estate.address}</p> : null}
           {estate.lat != null && estate.lng != null ? (
             <p>
@@ -150,7 +156,7 @@ export default async function EstatePage({
           ) : null}
           
           {estate.lat != null && estate.lng != null ? (
-            <PastVuGallery lat={estate.lat} lng={estate.lng} estateName={estate.name} />
+            <PastVuGallery lat={estate.lat} lng={estate.lng} estateName={displayName} />
           ) : null}
         </article>
       }

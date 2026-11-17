@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CatalogRow } from "@/db/queries";
 import { SearchBox } from "@/components/SearchBox";
 import { catalogHref, type CatalogLink } from "@/lib/catalog-url";
+import { estateDisplayTitle } from "@/lib/estate-display-name";
 import { conditionLabel } from "@/lib/labels";
 import { guberniaByRegion, shortKind, shortRank, styleLabel } from "@/lib/reference";
 
@@ -81,7 +82,9 @@ export function EstateReel({
         ) : (
           <>
             <div className="reel">
-              {rows.map((row) => (
+              {rows.map((row) => {
+                const { title } = estateDisplayTitle(row.name, row.wikipediaTitle);
+                return (
                 <a
                   key={row.slug}
                   data-slug={row.slug}
@@ -97,14 +100,15 @@ export function EstateReel({
                   )}
                   <span className="reel-slide__caption">
                     <span className="kicker">{row.regionName}</span>
-                    <span className="reel-slide__name">{row.name}</span>
+                    <span className="reel-slide__name">{title}</span>
                     <span className="reel-slide__meta">
                       {row.objectType === "Ансамбль" ? "ансамбль · " : null}
                       открыть карточку
                     </span>
                   </span>
                 </a>
-              ))}
+              );
+              })}
             </div>
             {filters.page > 1 || hasMore ? (
               <nav className="reel-pager" aria-label="Страницы ленты">
@@ -124,10 +128,11 @@ export function EstateReel({
 
 function Glance({ row }: { row: CatalogRow }) {
   const gubernia = guberniaByRegion(row.regionId);
+  const { title } = estateDisplayTitle(row.name, row.wikipediaTitle);
   return (
     <div className="prose">
       <p className="kicker">{row.regionName}</p>
-      <p className="reel-aside__name">{row.name}</p>
+      <p className="reel-aside__name">{title}</p>
       <p className="muted">
         {[row.createdDateText, shortKind(row.objectType), shortRank(row.category)].filter(Boolean).join(" · ")}
       </p>
