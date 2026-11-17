@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { BackToReel } from "@/components/BackToReel";
 import { EstateMap } from "@/components/EstateMap";
 import { PhotoGallery } from "@/components/PhotoGallery";
+import { EnsemblePartsGallery } from "@/components/EnsemblePartsGallery";
+import { PastVuGallery } from "@/components/PastVuGallery";
 import { Fact } from "@/components/Fact";
 import { Frame } from "@/components/Frame";
 import { EstateHistory } from "@/components/EstateHistory";
@@ -59,9 +61,11 @@ export default async function EstatePage({
             summary={estate.summary}
             summarySource={estate.summarySource}
             wikipediaTitle={estate.wikipediaTitle}
+            wikipediaUrl={estate.wikipediaUrl}
             architects={architects}
             styleIds={estate.styleIds}
             createdDateText={estate.createdDateText}
+            slug={estate.slug}
           />
           {estate.lat != null && estate.lng != null ? (
             <EstateMap
@@ -140,6 +144,14 @@ export default async function EstatePage({
               ))}
             </ul>
           )}
+          
+          {estate.ensemblePhotos && estate.ensemblePhotos.length > 0 ? (
+            <EnsemblePartsGallery photos={estate.ensemblePhotos} parts={estate.parts} />
+          ) : null}
+          
+          {estate.lat != null && estate.lng != null ? (
+            <PastVuGallery lat={estate.lat} lng={estate.lng} estateName={estate.name} />
+          ) : null}
         </article>
       }
       right={

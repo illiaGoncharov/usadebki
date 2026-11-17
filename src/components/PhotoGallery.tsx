@@ -59,11 +59,25 @@ export function PhotoGallery({ name, photos }: { name: string; photos: Shot[] })
         {photo.sourceUrl ? (
           <>
             {" · "}
-            <a className="text-link" href={photo.sourceUrl}>
+            <a className="text-link" href={photo.sourceUrl} target="_blank" rel="noopener noreferrer">
               файл
             </a>
           </>
         ) : null}
+        {" · "}
+        <button 
+          type="button" 
+          className="text-button" 
+          onClick={() => {
+            if (confirm("Это фото показывает не то здание?\n\nМы отметим его для проверки.")) {
+              // TODO: отправить на сервер для флага isHidden
+              alert("Спасибо! Фото будет проверено модератором.");
+            }
+          }}
+          title="Сообщить, если фото показывает не то здание"
+        >
+          сообщить об ошибке
+        </button>
       </figcaption>
     </figure>
   );

@@ -7,9 +7,11 @@ type Props = {
   summary: string | null;
   summarySource: string | null;
   wikipediaTitle: string | null;
+  wikipediaUrl: string | null;
   architects: Person[];
   styleIds: string[];
   createdDateText: string | null;
+  slug: string;
 };
 
 /**
@@ -19,9 +21,11 @@ export async function EstateHistory({
   summary,
   summarySource,
   wikipediaTitle,
+  wikipediaUrl,
   architects,
   styleIds,
   createdDateText,
+  slug,
 }: Props) {
   const fromWiki = summarySource === "wikipedia";
   const fromEgrkn = summarySource === "egrkn-passport";
@@ -40,7 +44,14 @@ export async function EstateHistory({
     <>
       {body ? (
         <>
-          {fromWiki ? <p className="caption" style={{ marginBottom: "0.35rem" }}>Из статьи в русской Википедии</p> : null}
+          {fromWiki && wikipediaUrl ? (
+            <p className="caption" style={{ marginBottom: "0.35rem" }}>
+              Из{" "}
+              <a className="text-link" href={wikipediaUrl} target="_blank" rel="noopener noreferrer">
+                статьи в русской Википедии
+              </a>
+            </p>
+          ) : null}
           {fromEgrkn ? (
             <p className="caption" style={{ marginBottom: "0.35rem" }}>
               Справка из паспорта реестра (не полная история)
@@ -50,8 +61,11 @@ export async function EstateHistory({
         </>
       ) : (
         <p>
-          История этого места ещё не собрана. Если она есть в книге или статье, её можно дописать со ссылкой на
-          источник.
+          История этого места ещё не собрана. Если она есть в книге или статье, её можно{" "}
+          <a className="text-link" href={`/estates/${slug}/contribute?field=note`}>
+            дописать со ссылкой на источник
+          </a>
+          .
         </p>
       )}
       {credits ? (

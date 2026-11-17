@@ -746,3 +746,66 @@ textarea.field { min-height: 6.5rem; resize: vertical; }
 
   .filter-actions__view { margin-left: 0; }
 }
+
+/* PastVu Gallery */
+.pastvu-block {
+  margin-top: 1.6rem;
+}
+
+.pastvu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.8rem;
+}
+
+.pastvu-item {
+  display: block;
+  text-decoration: none;
+  border: 1px solid var(--gray-200);
+  border-radius: 4px;
+  overflow: hidden;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.pastvu-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.pastvu-thumb {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+}
+
+.pastvu-caption {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  background: var(--gray-50);
+}
+
+.pastvu-year {
+  font-weight: 500;
+  color: var(--gray-900);
+}
+
+.pastvu-author {
+  color: var(--gray-600);
+  font-size: 0.8rem;
+  margin-top: 0.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ensemble Parts Gallery */
+.ensemble-parts-block {
+  margin-top: 1.6rem;
+}
+
+@media (max-width: 640px) {
+  .pastvu-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
