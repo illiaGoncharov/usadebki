@@ -80,9 +80,25 @@ async function main() {
     }
 
     console.log(`4/4 HTTP ${BETA_BASE}/estates/${CHECK_SLUG}…`);
-    const response = await fetch(`${BETA_BASE}/estates/${CHECK_SLUG}`, { redirect: "follow" });
-    if (!response.ok) {
-      console.error(`Бета вернула ${response.status}. Код на Vercel мог отставать от схемы — проверьте деплой.`);
+    let ok = false;
+    let lastStatus = 0;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await fetch(`${BETA_BASE}/estates/${CHECK_SLUG}`, { redirect: "follow" });
+        lastStatus = response.status;
+        if (response.ok) {
+          ok = true;
+          break;
+        }
+      } catch {
+        // Neon или сеть могут сбрасывать сокет сразу после pg_restore
+      }
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+    }
+    if (!ok) {
+      console.error(`Бета вернула ${lastStatus}. Код на Vercel мог отставать от схемы — проверьте деплой.`);
       process.exit(1);
     }
 
