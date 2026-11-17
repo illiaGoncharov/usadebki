@@ -11,15 +11,12 @@ function createSql() {
   if (!url) {
     throw new Error("Не задан DATABASE_URL");
   }
-  // Pooled Neon/Vercel: без prepared statements (PgBouncer).
+  // Pooled Neon/Vercel: без prepared statements (PgBouncer); один коннект на инстанс serverless.
   const pooled = /-pooler\.|pgbouncer=true/i.test(url);
-  return postgres(url, { max: 10, prepare: !pooled });
+  return postgres(url, { max: 1, prepare: !pooled, idle_timeout: 20, connect_timeout: 10 });
 }
 
 export const sql = globalForDb.sql ?? createSql();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.sql = sql;
-}
+globalForDb.sql = sql;
 
 export const db = drizzle(sql, { schema });
