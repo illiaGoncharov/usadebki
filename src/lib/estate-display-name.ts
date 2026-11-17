@@ -29,22 +29,22 @@ export function splitRegistryEstateName(fullName: string): {
 }
 
 /**
- * Заголовок для UI: короткое имя + опциональный хвост из реестра для истории.
+ * Заголовок для UI: короткое имя; если заголовок сокращён, полное наименование
+ * из реестра возвращается целиком, чтобы положить его в начало «Истории».
  * Если есть статья Википедии — часто берём её заголовок вместо длинного паспорта.
  */
 export function estateDisplayTitle(
   fullName: string,
   wikipediaTitle?: string | null,
 ): { title: string; registryNote: string | null } {
-  const split = splitRegistryEstateName(fullName);
+  const full = fullName.trim();
+  const split = splitRegistryEstateName(full);
   const wiki = wikipediaTitle?.trim();
-  const passportIsLong = fullName.length > 80 || split.registryNote != null;
+  const passportIsLong = full.length > 80 || split.registryNote != null;
 
-  if (wiki && passportIsLong) {
-    return { title: wiki, registryNote: split.registryNote };
-  }
-
-  return split;
+  const title = wiki && passportIsLong ? wiki : split.title;
+  const registryNote = title !== full ? full : null;
+  return { title, registryNote };
 }
 
 /** Сшиваем текст истории с хвостом из наименования реестра (без дублей). */
