@@ -326,9 +326,18 @@ export async function getEstate(slug: string) {
   const [estate] = await db.select().from(estates).where(eq(estates.slug, slug)).limit(1);
   if (!estate) return null;
 
-  const [parts, photoRows, links, statementRows] = await Promise.all([
+  const [parts, photoRows, ensemblePhotoRows, links, statementRows] = await Promise.all([
     db.select().from(estateParts).where(eq(estateParts.estateId, estate.id)),
-    db.select().from(photos).where(eq(photos.estateId, estate.id)),
+    db.select().from(photos).where(and(
+      eq(photos.estateId, estate.id),
+      eq(photos.isHidden, false),
+      eq(photos.isEnsemblePart, false)
+    )),
+    db.select().from(photos).where(and(
+      eq(photos.estateId, estate.id),
+      eq(photos.isHidden, false),
+      eq(photos.isEnsemblePart, true)
+    )),
     db
       .select({
         id: estatePeople.id,
@@ -392,6 +401,9 @@ export async function getEstate(slug: string) {
     parts: parts.sort((a, b) => a.name.localeCompare(b.name, "ru")),
     photos: photoRows.sort(
       (a, b) => photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)) || Number(b.isPrimary) - Number(a.isPrimary),
+    ),
+    ensemblePhotos: ensemblePhotoRows.sort(
+      (a, b) => photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)),
     ),
     people: links
       .map((link) => ({

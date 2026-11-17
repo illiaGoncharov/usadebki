@@ -8,6 +8,13 @@
       "when": 1794849068885,
       "tag": "0000_rich_jazinda",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794901073198,
+      "tag": "0001_oval_night_thrasher",
+      "breakpoints": true
     }
   ]
 }

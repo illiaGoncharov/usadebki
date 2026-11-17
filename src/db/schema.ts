@@ -131,6 +131,12 @@ export const photos = pgTable(
     isPrimary: boolean("is_primary").notNull().default(false),
     sourceUrl: text("source_url"),
     origin: text("origin").notNull().default("commons"),
+    // Фото от части ансамбля (не основного объекта)
+    isEnsemblePart: boolean("is_ensemble_part").notNull().default(false),
+    // Скрыто администратором (неправильное фото)
+    isHidden: boolean("is_hidden").notNull().default(false),
+    // ЕГРОКН регистрационный номер объекта, которому фото действительно принадлежит
+    depictsEgrknNumber: text("depicts_egrkn_number"),
   },
   (table) => [uniqueIndex("photos_estate_url_idx").on(table.estateId, table.url)],
 );
