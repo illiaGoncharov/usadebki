@@ -255,15 +255,18 @@ export async function rejectContribution(formData: FormData) {
   redirect("/admin");
 }
 
-export async function login(_prev: FormState, formData: FormData): Promise<FormState> {
+/** Вход редактора — без useActionState, иначе redirect ломается на проде. */
+export async function loginFromForm(formData: FormData) {
   const password = text(formData.get("password"));
   const expected = process.env.ADMIN_PASSWORD ?? "";
-  if (!expected) return { error: "В .env не задан ADMIN_PASSWORD." };
+  if (!expected) {
+    redirect(`/admin/login?error=${encodeURIComponent("На сервере не задан ADMIN_PASSWORD.")}`);
+  }
   const { timingSafeEqual } = await import("node:crypto");
   const left = Buffer.from(password);
   const right = Buffer.from(expected);
   if (left.length !== right.length || !timingSafeEqual(left, right)) {
-    return { error: "Пароль не подходит." };
+    redirect(`/admin/login?error=${encodeURIComponent("Пароль не подходит.")}`);
   }
   const jar = await cookies();
   jar.set(adminCookie.name, adminToken(), adminCookie.options);

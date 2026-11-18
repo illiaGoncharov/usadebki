@@ -31,7 +31,11 @@ type ResendBody = {
 
 export function publicSiteOrigin() {
   const custom = process.env.SITE_URL?.trim().replace(/\/$/, "");
-  if (custom) return custom;
+  if (custom && !/localhost|127\.0\.0\.1/i.test(custom)) return custom;
+  const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (prod) return `https://${prod}`;
+  const branch = process.env.VERCEL_BRANCH_URL?.trim();
+  if (branch) return `https://${branch}`;
   const vercel = process.env.VERCEL_URL?.trim();
   if (vercel) return `https://${vercel}`;
   return "http://localhost:3000";

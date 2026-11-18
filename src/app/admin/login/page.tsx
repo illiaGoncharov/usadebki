@@ -6,8 +6,14 @@ import { isAdmin } from "@/lib/admin";
 
 export const metadata: Metadata = { title: "Вход" };
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   if (await isAdmin()) redirect("/admin");
+  const { error: errorRaw } = await searchParams;
+  const formError = errorRaw?.trim() || null;
 
   return (
     <Frame
@@ -22,7 +28,7 @@ export default async function LoginPage() {
         <div>
           <p className="kicker">Очередь правок</p>
           <h1>Вход</h1>
-          <LoginForm />
+          <LoginForm error={formError} />
         </div>
       }
       right={
