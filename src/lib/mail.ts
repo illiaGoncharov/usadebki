@@ -34,8 +34,7 @@ export function publicSiteOrigin() {
   if (custom && !/localhost|127\.0\.0\.1/i.test(custom)) return custom;
   const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
   if (prod) return `https://${prod}`;
-  const branch = process.env.VERCEL_BRANCH_URL?.trim();
-  if (branch) return `https://${branch}`;
+  // VERCEL_BRANCH_URL не используем — в письмах окажется одноразовый URL деплоя (…-hash-….vercel.app).
   const vercel = process.env.VERCEL_URL?.trim();
   if (vercel) return `https://${vercel}`;
   return "http://localhost:3000";
