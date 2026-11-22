@@ -12,8 +12,15 @@ function createSql() {
     throw new Error("Не задан DATABASE_URL");
   }
   // Pooled Neon/Vercel: без prepared statements (PgBouncer); один коннект на инстанс serverless.
+  // connection.search_path: после pg_restore у Neon иногда пустой search_path → 500 на бете.
   const pooled = /-pooler\.|pgbouncer=true/i.test(url);
-  return postgres(url, { max: 1, prepare: !pooled, idle_timeout: 20, connect_timeout: 10 });
+  return postgres(url, {
+    max: 1,
+    prepare: !pooled,
+    idle_timeout: 20,
+    connect_timeout: 10,
+    connection: { search_path: "public" },
+  });
 }
 
 export const sql = globalForDb.sql ?? createSql();

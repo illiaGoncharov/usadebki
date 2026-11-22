@@ -53,10 +53,16 @@ async function main() {
     { stdio: "inherit" },
   );
 
-  const sql = postgres(url, { max: 1 });
+  // Без prepare: pooled Neon; search_path после pg_restore часто пустой.
+  const sql = postgres(url, { max: 1, prepare: false });
 
   try {
-    console.log("3/4 Схема photos и журнал drizzle…");
+    console.log("3/4 search_path + схема photos и журнал drizzle…");
+    // pg_restore --clean сбрасывает search_path у роли/БД → Vercel видит «relation does not exist».
+    await sql.unsafe("ALTER DATABASE neondb SET search_path TO public");
+    await sql.unsafe("ALTER ROLE CURRENT_USER SET search_path TO public");
+    await sql.unsafe("SELECT set_config('search_path', 'public', false)");
+
     const cols = await sql<{ column_name: string }[]>`
       select column_name
       from information_schema.columns

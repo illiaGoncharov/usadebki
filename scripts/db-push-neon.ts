@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import postgres from "postgres";
 
 const url = process.env.NEON_DATABASE_URL?.trim();
 if (!url) {
@@ -24,5 +25,14 @@ execSync(
   ].join(" "),
   { stdio: "inherit" },
 );
+
+// pg_restore --clean может обнулить search_path — без public приложение на Vercel падает с 500.
+const sql = postgres(url, { max: 1, prepare: false });
+try {
+  await sql.unsafe("ALTER DATABASE neondb SET search_path TO public");
+  await sql.unsafe("ALTER ROLE CURRENT_USER SET search_path TO public");
+} finally {
+  await sql.end({ timeout: 5 });
+}
 
 console.log("База на Neon обновлена. Проверка в SQL Editor: select count(*) from estates;");
