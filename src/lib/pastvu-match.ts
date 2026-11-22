@@ -135,7 +135,6 @@ export function streetNamesFromEstateAddress(address: string | null | undefined)
  * Почтамт — тоже ансамбль, но компактный, и соседние кадры там как раз опасны.
  */
 export function isWideEstatePastVu(ctx: PastVuEstateContext) {
-  if (ctx.objectType === "Ансамбль") return true;
   const refs = addressRefs(ctx.address);
   return refs.houses.length >= 5 || (ctx.address?.length ?? 0) >= 100;
 }
@@ -146,7 +145,7 @@ function nearMeters(ctx: PastVuEstateContext) {
 }
 
 export function pastVuSearchRadiusKm(ctx: PastVuEstateContext) {
-  return isWideEstatePastVu(ctx) ? 0.7 : 0.25;
+  return isWideEstatePastVu(ctx) ? 0.5 : 0.25;
 }
 
 /** Страниц по 30: у всех объектов смотрим дальше первой страницы, у большого комплекса — ещё дальше. */

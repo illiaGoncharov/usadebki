@@ -5,10 +5,24 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { contributions, estates, inquiries } from "@/db/schema";
+import { contributions, estatePeople, estates, inquiries, photos } from "@/db/schema";
 import { adminCookie, adminToken, isAdmin } from "@/lib/admin";
-import { publishContribution, publishContributionById } from "@/lib/contribution-publish";
-import { conditionLabel, isConditionId, isPredicateId, predicateLabel, splitOwnerNames } from "@/lib/labels";
+import { safeAdminReturn } from "@/lib/admin-return";
+import {
+  publishContribution,
+  publishContributionById,
+  publishInstantEdit,
+  restoreStatementById,
+  revokeStatementById,
+  setPersonAsLastOwner,
+} from "@/lib/contribution-publish";
+import {
+  conditionLabel,
+  isConditionId,
+  isPredicateId,
+  predicateLabel,
+  splitOwnerNames,
+} from "@/lib/labels";
 import { readInquiryAttachment, saveInquiryAttachment } from "@/lib/inquiry-attachment";
 import {
   sendContributionMail,
@@ -16,7 +30,7 @@ import {
   sendInquiryMail,
   sendInquiryThanksMail,
 } from "@/lib/mail";
-import { isStyleId, styleLabel } from "@/lib/reference";
+import { areValidStyleIds, formatStyleLabels } from "@/lib/reference";
 
 export type FormState = {
   error: string | null;
@@ -42,6 +56,8 @@ export async function submitInquiry(_prev: FormState, formData: FormData): Promi
   if (suggestedPhotoUrlRaw && !suggestedPhotoUrl) {
     return { error: "Ссылка на снимок должна начинаться с http:// или https://." };
   }
+  const wrongPhotoUrlRaw = text(formData.get("wrongPhotoUrl"));
+  const wrongPhotoUrl = wrongPhotoUrlRaw ? cleanUrl(wrongPhotoUrlRaw) : null;
 
   let attachment: Awaited<ReturnType<typeof readInquiryAttachment>> = null;
   try {
@@ -50,10 +66,10 @@ export async function submitInquiry(_prev: FormState, formData: FormData): Promi
     return { error: error instanceof Error ? error.message : "Не удалось прочитать файл." };
   }
 
-  const hasPhotoHint = Boolean(suggestedPhotoUrl || attachment);
+  const hasPhotoHint = Boolean(suggestedPhotoUrl || attachment || wrongPhotoUrl);
   if (message.length > 4000) return { error: "Текст слишком длинный." };
   if (topic === "photo" && !hasPhotoHint && message.length < 10) {
-    return { error: "Опишите проблему, приложите снимок или дайте ссылку на верное фото." };
+    return { error: "Опишите, почему снимок мимо, или дайте ссылку на верный." };
   }
   if (message.length < 3 && !hasPhotoHint) {
     return { error: "Напишите хотя бы пару слов." };
@@ -65,11 +81,16 @@ export async function submitInquiry(_prev: FormState, formData: FormData): Promi
     return { error: "Нужна рабочая почта для ответа." };
   }
 
+  // В письмо и архив: спорный снимок + текст пользователя.
+  const fullMessage = wrongPhotoUrl
+    ? `Снимок с карточки (мимо): ${wrongPhotoUrl}\n\n${message}`
+    : message;
+
   const emailed = await sendInquiryMail({
     topic,
     authorName,
     contact,
-    message,
+    message: fullMessage,
     estateName,
     estateSlug,
     pageUrl,
@@ -86,7 +107,7 @@ export async function submitInquiry(_prev: FormState, formData: FormData): Promi
       topic,
       estateSlug,
       estateName,
-      message,
+      message: fullMessage,
       authorName,
       contact,
       pageUrl,
@@ -148,11 +169,27 @@ async function submitContributionImpl(formData: FormData): Promise<FormState> {
 
   if (!slug || !isPredicateId(predicate)) return { error: "Не понял, какое поле вы уточняете." };
   if (!body) return { error: "Напишите, что именно известно." };
-  if (body.length > 4000) return { error: "Текст слишком длинный. Хватит короткой справки." };
+  const maxLen = predicate === "history" ? 12000 : 4000;
+  if (body.length > maxLen) {
+    return {
+      error:
+        predicate === "history"
+          ? "Текст истории слишком длинный. Сократите до сути."
+          : "Текст слишком длинный. Хватит короткой справки.",
+    };
+  }
   if (predicate === "condition" && !isConditionId(body)) return { error: "Выберите состояние из списка." };
-  if (predicate === "style" && !isStyleId(body)) return { error: "Выберите стиль из списка." };
-  if (predicate === "owners" && splitOwnerNames(body).length === 0) {
-    return { error: "Напишите хотя бы одно имя, каждое с новой строки." };
+  if (predicate === "style" && !areValidStyleIds(body)) return { error: "Выберите хотя бы один стиль из списка." };
+  if (
+    (predicate === "owners" || predicate === "architects") &&
+    splitOwnerNames(body).length === 0
+  ) {
+    return {
+      error:
+        predicate === "architects"
+          ? "Напишите хотя бы одно имя архитектора, каждое с новой строки."
+          : "Напишите хотя бы одно имя, каждое с новой строки.",
+    };
   }
   if (!authorName || authorName.length < 2 || authorName.length > 120) {
     return { error: "Подпишите правку именем." };
@@ -173,8 +210,8 @@ async function submitContributionImpl(formData: FormData): Promise<FormState> {
   const textDisplay =
     predicate === "condition" && isConditionId(body)
       ? conditionLabel(body)
-      : predicate === "style" && isStyleId(body)
-        ? styleLabel(body)
+      : predicate === "style" && areValidStyleIds(body)
+        ? formatStyleLabels(body)
         : body;
 
   const [row] = await db
@@ -232,27 +269,174 @@ async function submitContributionImpl(formData: FormData): Promise<FormState> {
 export async function acceptContribution(formData: FormData) {
   await assertAdmin();
   const id = text(formData.get("id"));
-  if (!id) redirect("/admin");
+  if (!id) redirect("/admin/queue");
 
   const slug = await publishContributionById(id);
-  if (!slug) redirect("/admin");
+  if (!slug) redirect("/admin/queue");
 
   revalidatePath(`/estates/${slug}`);
   revalidatePath("/");
+  revalidatePath("/admin/queue");
+  revalidatePath("/admin/archive");
   revalidatePath("/admin");
-  redirect("/admin");
+  redirect("/admin/queue");
 }
 
 export async function rejectContribution(formData: FormData) {
   await assertAdmin();
   const id = text(formData.get("id"));
-  if (!id) redirect("/admin");
+  if (!id) redirect("/admin/queue");
   await db
     .update(contributions)
     .set({ status: "rejected" })
     .where(and(eq(contributions.id, id), eq(contributions.status, "pending")));
+  revalidatePath("/admin/queue");
+  revalidatePath("/admin/archive");
   revalidatePath("/admin");
-  redirect("/admin");
+  redirect("/admin/queue");
+}
+
+/** Моментальное сохранение правки от редактора без ввода дополнительных полей. */
+export async function submitInstantEdit(formData: FormData) {
+  await assertAdmin();
+  const slug = text(formData.get("slug"));
+  const predicate = text(formData.get("predicate"));
+  const body = text(formData.get("text"));
+  const asLastOwner = text(formData.get("asLastOwner")) === "1";
+  const returnTo = safeAdminReturn(text(formData.get("returnTo")), "");
+
+  if (!slug || !isPredicateId(predicate)) {
+    redirect(returnTo || (slug ? `/estates/${slug}` : "/"));
+  }
+  if (!body) {
+    redirect(returnTo || `/estates/${slug}`);
+  }
+
+  let success = false;
+  try {
+    await publishInstantEdit({ slug, predicate, text: body, asLastOwner });
+    revalidatePath(`/estates/${slug}`);
+    revalidatePath(`/admin/estates/${slug}/history`);
+    revalidatePath("/");
+    revalidatePath("/admin/history");
+    revalidatePath("/admin/archive");
+    revalidatePath("/admin");
+    success = true;
+  } catch (error) {
+    console.error("[submitInstantEdit]", error);
+  }
+
+  if (returnTo) {
+    redirect(returnTo);
+  }
+  if (success) {
+    redirect(`/estates/${slug}?sent=1&published=1`);
+  } else {
+    redirect(`/estates/${slug}`);
+  }
+}
+
+/** Отмена правки (утверждения) из истории изменений в случае ошибки. */
+export async function revokeStatement(formData: FormData) {
+  await assertAdmin();
+  const id = text(formData.get("id"));
+  const returnTo = safeAdminReturn(text(formData.get("returnTo")), "/admin/history");
+  if (!id) redirect(returnTo);
+
+  const slug = await revokeStatementById(id);
+  if (slug) {
+    revalidatePath(`/estates/${slug}`);
+    revalidatePath(`/admin/estates/${slug}/history`);
+  }
+  revalidatePath("/");
+  revalidatePath("/admin/history");
+  revalidatePath("/admin/archive");
+  revalidatePath("/admin");
+  redirect(returnTo);
+}
+
+/** Удалить заметку / утверждение прямо с карточки усадьбы. */
+export async function removeStatementFromEstate(formData: FormData) {
+  await assertAdmin();
+  const id = text(formData.get("id"));
+  const slug = text(formData.get("slug"));
+  if (!id || !slug) redirect(slug ? `/estates/${slug}` : "/");
+
+  await revokeStatementById(id);
+  revalidatePath(`/estates/${slug}`);
+  revalidatePath(`/admin/estates/${slug}/history`);
+  revalidatePath("/");
+  revalidatePath("/admin/history");
+  redirect(`/estates/${slug}`);
+}
+
+/** Админ: снимок мимо — скрыть в БД, на карточке появится следующий или PastVu. */
+export async function hideEstatePhoto(formData: FormData) {
+  await assertAdmin();
+  const id = text(formData.get("id"));
+  const slug = text(formData.get("slug"));
+  if (!id || !slug) redirect(slug ? `/estates/${slug}` : "/");
+
+  const [estate] = await db
+    .select({ id: estates.id })
+    .from(estates)
+    .where(eq(estates.slug, slug))
+    .limit(1);
+  if (!estate) redirect("/");
+
+  await db
+    .update(photos)
+    .set({ isHidden: true, isPrimary: false })
+    .where(and(eq(photos.id, id), eq(photos.estateId, estate.id)));
+
+  revalidatePath(`/estates/${slug}`);
+  revalidatePath("/");
+  redirect(`/estates/${slug}`);
+}
+
+/** Убрать человека (архитектора / владельца) с карточки. */
+export async function removeEstatePerson(formData: FormData) {
+  await assertAdmin();
+  const id = text(formData.get("id"));
+  const slug = text(formData.get("slug"));
+  if (!id || !slug) redirect(slug ? `/estates/${slug}` : "/");
+
+  await db.delete(estatePeople).where(eq(estatePeople.id, id));
+  revalidatePath(`/estates/${slug}`);
+  revalidatePath("/");
+  redirect(`/estates/${slug}`);
+}
+
+/** Отметить владельца как последнего до 1917. */
+export async function setEstatePersonAsLastOwner(formData: FormData) {
+  await assertAdmin();
+  const id = text(formData.get("id"));
+  const slug = text(formData.get("slug"));
+  if (!id || !slug) redirect(slug ? `/estates/${slug}` : "/");
+
+  await setPersonAsLastOwner(id);
+  revalidatePath(`/estates/${slug}`);
+  revalidatePath("/");
+  redirect(`/estates/${slug}`);
+}
+
+/** Восстановление отменённой правки. */
+export async function restoreStatement(formData: FormData) {
+  await assertAdmin();
+  const id = text(formData.get("id"));
+  const returnTo = safeAdminReturn(text(formData.get("returnTo")), "/admin/history");
+  if (!id) redirect(returnTo);
+
+  const slug = await restoreStatementById(id);
+  if (slug) {
+    revalidatePath(`/estates/${slug}`);
+    revalidatePath(`/admin/estates/${slug}/history`);
+  }
+  revalidatePath("/");
+  revalidatePath("/admin/history");
+  revalidatePath("/admin/archive");
+  revalidatePath("/admin");
+  redirect(returnTo);
 }
 
 /** Вход редактора — без useActionState, иначе redirect ломается на проде. */

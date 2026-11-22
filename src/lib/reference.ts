@@ -443,6 +443,7 @@ export const STYLES = [
   { id: "baroque", label: "барокко" },
   { id: "rococo", label: "рококо" },
   { id: "classical", label: "классицизм" },
+  { id: "neoclassical", label: "неоклассицизм" },
   { id: "empire", label: "ампир" },
   { id: "eclectic", label: "эклектика" },
   { id: "retrospective", label: "ретроспективизм" },
@@ -492,14 +493,15 @@ export const WIKI_STYLE: Record<string, StyleId> = {
   Q122960: "rococo",
   Q7356060: "rococo",
   Q170292: "classical",
-  Q54111: "classical",
-  Q14378: "classical",
   Q3621606: "classical",
   Q7382246: "classical",
   Q4198718: "classical",
-  Q1788409: "classical",
   Q264649: "classical",
   Q50084199: "classical",
+  // Неоклассицизм (в т.ч. XX в.) — отдельно от классицизма.
+  Q54111: "neoclassical",
+  Q14378: "neoclassical",
+  Q1788409: "neoclassical",
   Q191105: "empire",
   Q112711827: "empire",
   Q28666761: "empire",
@@ -554,6 +556,8 @@ const STYLE_RANK: StyleId[] = [
   "chateau",
   "beaux",
   "eclectic",
+  // Неоклассицизм раньше классицизма: иначе «неоклассицизм» поймает /классицизм/.
+  "neoclassical",
   "classical",
   "wooden",
 ];
@@ -591,7 +595,8 @@ const STYLE_TEXT: { id: StyleId; pattern: RegExp }[] = [
   { id: "chateau", pattern: /шатоэск/i },
   { id: "beaux", pattern: /бозар|beaux-arts/i },
   { id: "eclectic", pattern: /эклектик|историзм/i },
-  { id: "classical", pattern: /классицизм|палладиан/i },
+  { id: "neoclassical", pattern: /неоклассиц/i },
+  { id: "classical", pattern: /(?<!нео)классицизм|палладиан/i },
   { id: "wooden", pattern: /деревянн\S*\s+зодчеств/i },
 ];
 
@@ -605,6 +610,18 @@ export function styleFromText(text: string) {
 
 export function isStyleId(value: string): value is StyleId {
   return STYLES.some((item) => item.id === value);
+}
+
+export function areValidStyleIds(raw: string): boolean {
+  const ids = raw.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+  return ids.length > 0 && ids.every((id) => isStyleId(id));
+}
+
+export function formatStyleLabels(raw: string | null | undefined): string {
+  if (!raw) return "не указан";
+  const ids = raw.split(/[,;\s]+/).map((s) => s.trim()).filter(Boolean);
+  const labels = ids.map((id) => (isStyleId(id) ? styleLabel(id) : id));
+  return labels.length > 0 ? labels.join(", ") : "не указан";
 }
 
 export function styleLabel(id: string | null | undefined) {

@@ -34,8 +34,9 @@ export function conditionFromCategories(categories: string[]): ConditionId | nul
   const blob = categories.join("\n");
 
   if (/восстановлен\S*\s+из\s+руин/i.test(blob)) return "restored";
+  // Музей-усадьба обычно и восстановлена, и работает.
   if (/музе[ий]-усадьб|дома-музе|литературно-мемориальн|биографическ\S*\s+музе/i.test(blob)) {
-    return "restored";
+    return "restored_in_use";
   }
   if (/руин/i.test(blob)) return "ruins";
   if (/утрачен/i.test(blob)) return "lost";
@@ -55,7 +56,7 @@ export function conditionFromText(text: string): ConditionId | null {
       intro,
     )
   ) {
-    return "restored";
+    return "restored_in_use";
   }
   if (
     /отреставрирован|восстановлен\S* в \d{4}|после реставрации/i.test(intro) &&
@@ -63,12 +64,12 @@ export function conditionFromText(text: string): ConditionId | null {
   ) {
     return "restored";
   }
-  if (/действующ(ий|ая) (?:музей|усадьба)/i.test(intro)) return "in_use";
+  if (/действующ(ий|ая) (?:музей|усадьба)/i.test(intro)) return "restored_in_use";
   if (/размещается (?:музей|клиник|школ|больниц|санаторий|гостиниц|посольство)/i.test(intro)) {
-    return "in_use";
+    return "restored_in_use";
   }
   if (/располагается (?:музей|посольство|санаторий|гостиница)/i.test(intro) && !/ранее располага/i.test(intro)) {
-    return "in_use";
+    return "restored_in_use";
   }
 
   if (/руинированн|лежат в руинах|обратилась в руины|сохранил\S* (?:лишь|только) руин/i.test(intro)) {

@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { submitContributionFromForm } from "@/app/actions";
-import { CONDITIONS, PREDICATES, type PredicateId } from "@/lib/labels";
-import { STYLES } from "@/lib/reference";
+import { StylePicker } from "@/components/StylePicker";
+import { CONDITION_PICK_HINT, CONDITIONS, PREDICATES, type PredicateId } from "@/lib/labels";
 
 export function ContributeForm({
   slug,
@@ -37,34 +37,43 @@ export function ContributeForm({
       </select>
 
       {predicate === "condition" ? (
-        <select name="text" className="field" defaultValue="ruins">
-          {CONDITIONS.filter((item) => item.id !== "unknown").map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+        <>
+          <select name="text" className="field" defaultValue="ruins">
+            {CONDITIONS.filter((item) => item.id !== "unknown").map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+          <p className="fact__hint" style={{ margin: "0 0 0.5rem" }}>
+            {CONDITION_PICK_HINT}
+          </p>
+        </>
       ) : predicate === "style" ? (
-        <select name="text" className="field" defaultValue="classical">
-          {STYLES.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-            </option>
-          ))}
-        </select>
+        <StylePicker />
       ) : (
-        <textarea
-          name="text"
-          className="field"
-          required
-          placeholder={
-            predicate === "owners"
-              ? "Каждое имя с новой строки"
-              : predicate === "year"
-                ? "Например: построена в 1790-е, перестроена в 1840"
-                : "Короткая справка"
-          }
-        />
+        <>
+          <textarea
+            name="text"
+            className="field"
+            required
+            rows={predicate === "history" ? 10 : undefined}
+            placeholder={
+              predicate === "owners" || predicate === "architects"
+                ? "Каждое имя с новой строки"
+                : predicate === "year"
+                  ? "Например: построена в 1790-е, перестроена в 1840"
+                  : predicate === "history"
+                    ? "Текст истории усадьбы"
+                    : "Короткая справка"
+            }
+          />
+          {predicate === "owners" ? (
+            <p className="fact__hint" style={{ margin: "0 0 0.5rem" }}>
+              Первая строка — последний владелец до 1917, ниже — более ранние.
+            </p>
+          ) : null}
+        </>
       )}
 
       <label className="kicker" htmlFor="sourceTitle">

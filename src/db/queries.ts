@@ -1,10 +1,11 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { PHOTO_KIND_SQL, photoFileKey, photoKind, photoRank, pickHeroPhoto } from "@/lib/photo";
-import { AGGLOMERATIONS } from "@/lib/reference";
+import { AGGLOMERATIONS, isStyleId } from "@/lib/reference";
 import { placeFromAddress } from "@/lib/search";
 import { db, sql as pg } from "./index";
 import {
   contributions,
+  inquiries,
   estateParts,
   estatePeople,
   estates,
@@ -79,6 +80,8 @@ export async function listEstates(options: {
   text?: boolean;
   q?: string;
   page: number;
+  /** Сессионный seed: среди полных карточек порядок разный при каждом заходе. */
+  shuffleSeed?: string | null;
 }) {
   await ensurePhotoKind();
   const regionIds = options.regionIds;
@@ -91,6 +94,7 @@ export async function listEstates(options: {
   const photo = options.photo ? true : null;
   const withText = options.text ? true : null;
   const q = options.q ?? null;
+  const shuffleSeed = options.shuffleSeed?.trim() || null;
   const offset = (options.page - 1) * PAGE_SIZE;
   const cities = sql.join(
     AGGLOMERATIONS.map((city) => sql`(${city.name}::text, ${city.lat}::float8, ${city.lng}::float8)`),
@@ -133,7 +137,7 @@ export async function listEstates(options: {
            coalesce(s.text, e.wiki_condition, 'unknown') as condition,
            coalesce(st.text, e.wiki_style) as style,
            case
-             when st.text is not null then array[st.text]
+             when st.text is not null then string_to_array(replace(st.text, ' ', ''), ',')
              when e.wiki_styles is not null then e.wiki_styles
              when e.wiki_style is not null then array[e.wiki_style]
              else null
@@ -235,7 +239,14 @@ export async function listEstates(options: {
       and (
         ${condition}::text is null
         or (${condition} = 'poor' and e.condition in ('lost', 'ruins', 'neglect'))
-        or (${condition} <> 'poor' and e.condition = ${condition})
+        or (${condition} = 'restored' and e.condition in ('restored', 'restored_in_use'))
+        or (${condition} = 'in_use' and e.condition in ('in_use', 'restored_in_use'))
+        or (
+          ${condition} <> 'poor'
+          and ${condition} <> 'restored'
+          and ${condition} <> 'in_use'
+          and e.condition = ${condition}
+        )
       )
       and (
         ${style}::text is null
@@ -258,13 +269,25 @@ export async function listEstates(options: {
         or (${distance} = 'far' and e.km >= 150)
       )
   `;
+  // Полнота: текст + фото + вики; внутри группы — shuffle по seed (или имя при поиске).
+  const orderBy = q
+    ? sql`order by (summary is null), ("photoUrl" is null), name`
+    : shuffleSeed
+      ? sql`order by
+          (summary is null),
+          (coalesce(length(summary), 0) < 200),
+          ("photoUrl" is null),
+          ("wikipediaTitle" is null),
+          md5(slug || ${shuffleSeed})`
+      : sql`order by (summary is null), ("photoUrl" is null), name`;
+
   const [rowsResult, countResult] = await Promise.all([
     db.execute<CatalogRow & { era_year: number | null }>(sql`
       select slug, name, "wikipediaTitle", "regionId", "regionName", address, category, "objectType",
              "createdDateText", summary, condition, style, "styleIds", "photoUrl", km, city
       from (${base}) e
       ${where}
-      order by (summary is null), ("photoUrl" is null), name
+      ${orderBy}
       limit ${PAGE_SIZE + 1}
       offset ${offset}
     `),
@@ -407,15 +430,20 @@ export async function getEstate(slug: string) {
   const conditions = statementRows.filter((row) => row.predicate === "condition");
   const latestCondition = conditions[0];
   const latestStyle = statementRows.find((row) => row.predicate === "style");
-  const sourceMap = new Map<string, { id: string; title: string; page: string | null; url: string | null }>();
+
+  // В карточке — только внешние источники со ссылкой. Служебные «правка редактора» не показываем.
+  const sourceMap = new Map<string, { id: string; title: string; page: string | null; url: string }>();
   const remember = (source: {
     sourceId: string | null;
     sourceTitle: string | null;
     sourcePage: string | null;
     sourceUrl: string | null;
   }) => {
-    if (!source.sourceId || !source.sourceTitle) return;
-    sourceMap.set(source.sourceId, {
+    if (!source.sourceId || !source.sourceTitle || !source.sourceUrl) return;
+    if (/правка редактора/i.test(source.sourceTitle)) return;
+    const key = source.sourceUrl.replace(/\/$/, "").toLowerCase();
+    if (sourceMap.has(key)) return;
+    sourceMap.set(key, {
       id: source.sourceId,
       title: source.sourceTitle,
       page: source.sourcePage,
@@ -441,6 +469,52 @@ export async function getEstate(slug: string) {
   const registryDuplicates = aliasRows.map((row) => row.reg).filter((reg) => reg !== estate.egrknRegNumber);
   const registryNumbers = [estate.egrknRegNumber, ...registryDuplicates];
 
+  const humanStyleIds = latestStyle?.text
+    ? latestStyle.text
+        .split(/[,;\s]+/)
+        .map((s) => s.trim())
+        .filter((s) => isStyleId(s))
+    : [];
+
+  // Люди: одно имя + роль — одна строка.
+  const peopleSeen = new Set<string>();
+  const peopleList = links
+    .map((link) => ({
+      id: link.id,
+      role: link.role,
+      name: link.name,
+      years: link.years,
+    }))
+    .filter((person) => {
+      const key = `${person.role}:${person.name.trim().toLowerCase()}`;
+      if (peopleSeen.has(key)) return false;
+      peopleSeen.add(key);
+      return true;
+    })
+    .sort((a, b) => roleOrder(a.role) - roleOrder(b.role) || a.name.localeCompare(b.name, "ru"));
+
+  // Заметки: без повторов одного и того же текста.
+  const noteSeen = new Set<string>();
+  const notes = statementRows
+    .filter((row) => row.predicate === "note")
+    .filter((row) => {
+      const key = row.text.trim().toLowerCase().replace(/\s+/g, " ");
+      if (!key || noteSeen.has(key)) return false;
+      noteSeen.add(key);
+      return true;
+    });
+
+  // Даты тоже без дублей одного текста.
+  const yearSeen = new Set<string>();
+  const yearNotes = statementRows
+    .filter((row) => row.predicate === "year")
+    .filter((row) => {
+      const key = row.text.trim().toLowerCase().replace(/\s+/g, " ");
+      if (!key || yearSeen.has(key)) return false;
+      yearSeen.add(key);
+      return true;
+    });
+
   return {
     ...estate,
     registryNumbers,
@@ -450,25 +524,20 @@ export async function getEstate(slug: string) {
     ensemblePhotos: ensemblePhotoRows.sort(
       (a, b) => photoRank(photoKind(a.url)) - photoRank(photoKind(b.url)),
     ),
-    people: links
-      .map((link) => ({
-        id: link.id,
-        role: link.role,
-        name: link.name,
-        years: link.years,
-      }))
-      .sort((a, b) => roleOrder(a.role) - roleOrder(b.role) || a.name.localeCompare(b.name, "ru")),
+    people: peopleList,
     condition: latestCondition?.text ?? estate.wikiCondition ?? "unknown",
-    style: latestStyle?.text ?? estate.wikiStyle ?? null,
-    styleIds: latestStyle?.text
-      ? [latestStyle.text]
+    style: humanStyleIds[0] ?? latestStyle?.text ?? estate.wikiStyle ?? null,
+    styleIds: humanStyleIds.length > 0
+      ? humanStyleIds
       : estate.wikiStyles?.length
         ? estate.wikiStyles
         : estate.wikiStyle
           ? [estate.wikiStyle]
           : [],
-    yearNotes: statementRows.filter((row) => row.predicate === "year"),
-    notes: statementRows.filter((row) => row.predicate === "note"),
+    // Правка «история» перекрывает summary из Википедии / паспорта.
+    history: statementRows.find((row) => row.predicate === "history")?.text ?? null,
+    yearNotes,
+    notes,
     sources: [...sourceMap.values()],
   };
 }
@@ -492,6 +561,76 @@ export async function listPending() {
     .innerJoin(estates, eq(estates.id, contributions.estateId))
     .where(eq(contributions.status, "pending"))
     .orderBy(desc(contributions.createdAt));
+}
+
+export async function listContributionsArchive() {
+  return db
+    .select({
+      id: contributions.id,
+      status: contributions.status,
+      predicate: contributions.predicate,
+      text: contributions.text,
+      authorName: contributions.authorName,
+      contact: contributions.contact,
+      sourceTitle: contributions.sourceTitle,
+      sourcePage: contributions.sourcePage,
+      sourceUrl: contributions.sourceUrl,
+      createdAt: contributions.createdAt,
+      estateName: estates.name,
+      estateSlug: estates.slug,
+    })
+    .from(contributions)
+    .innerJoin(estates, eq(estates.id, contributions.estateId))
+    .orderBy(desc(contributions.createdAt));
+}
+
+export async function listInquiriesArchive() {
+  return db
+    .select({
+      id: inquiries.id,
+      topic: inquiries.topic,
+      estateSlug: inquiries.estateSlug,
+      estateName: inquiries.estateName,
+      message: inquiries.message,
+      authorName: inquiries.authorName,
+      contact: inquiries.contact,
+      pageUrl: inquiries.pageUrl,
+      suggestedPhotoUrl: inquiries.suggestedPhotoUrl,
+      attachmentFilename: inquiries.attachmentFilename,
+      attachmentPath: inquiries.attachmentPath,
+      emailSent: inquiries.emailSent,
+      createdAt: inquiries.createdAt,
+    })
+    .from(inquiries)
+    .orderBy(desc(inquiries.createdAt));
+}
+
+/** История утверждений: глобально или только по одной усадьбе (slug). */
+export async function listStatementsHistory(estateSlug?: string) {
+  const rows = await db
+    .select({
+      id: statements.id,
+      predicate: statements.predicate,
+      text: statements.text,
+      status: statements.status,
+      createdAt: statements.createdAt,
+      estateId: estates.id,
+      estateName: estates.name,
+      estateSlug: estates.slug,
+      sourceId: sources.id,
+      sourceTitle: sources.title,
+      sourceAuthor: sources.author,
+      sourceUrl: sources.url,
+      contributionAuthor: contributions.authorName,
+    })
+    .from(statements)
+    .innerJoin(estates, eq(estates.id, statements.estateId))
+    .leftJoin(sources, eq(sources.id, statements.sourceId))
+    .leftJoin(contributions, eq(contributions.id, statements.contributionId))
+    .where(estateSlug ? eq(estates.slug, estateSlug) : undefined)
+    .orderBy(desc(statements.createdAt));
+
+  return rows;
 }
 
 export async function mapOverview() {

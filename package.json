@@ -12,6 +12,7 @@
     "db:migrate": "node --env-file=.env ./node_modules/drizzle-kit/bin.cjs migrate",
     "db:migrate:neon": "node --env-file=.env --import tsx scripts/db-migrate-neon.ts",
     "db:dump": "bash scripts/db-dump-local.sh",
+    "db:pull-neon": "bash scripts/db-pull-neon.sh",
     "db:push-neon": "node --env-file=.env --import tsx scripts/db-push-neon.ts",
     "db:sync-neon": "npm run db:dump && npm run db:push-neon",
     "beta:publish": "node --env-file=.env --import tsx scripts/beta-publish.ts",
@@ -29,7 +30,8 @@
     "dedupe:estates": "node --env-file=.env --import tsx scripts/dedupe-estates.ts",
     "dedupe:test": "node --import tsx scripts/test-estate-dedupe.ts",
     "pastvu:test": "node --import tsx scripts/test-pastvu-match.ts",
-    "pastvu:gallery": "node --env-file=.env --import tsx scripts/pastvu-gallery-fill.ts"
+    "pastvu:gallery": "node --env-file=.env --import tsx scripts/pastvu-gallery-fill.ts",
+    "crowdsource:archive": "node --env-file=.env --import tsx scripts/archive-crowdsource.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.4",

@@ -134,6 +134,60 @@ h2 { font-size: 1.35rem; }
 
 .photo-block .caption { margin-bottom: 1.3rem; }
 
+.photo-block .caption.photo-related-links {
+  margin-top: -0.7rem;
+  margin-bottom: 1.3rem;
+}
+
+/* Обёртка снимка: «мимо» появляется слева внизу при наведении. */
+.photo-frame {
+  position: relative;
+  display: block;
+}
+
+.photo-miss-form {
+  position: absolute;
+  left: 0.65rem;
+  bottom: 0.65rem;
+  margin: 0;
+  z-index: 2;
+}
+
+.photo-miss {
+  position: absolute;
+  left: 0.65rem;
+  bottom: 0.65rem;
+  z-index: 2;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--ink);
+  background: rgba(246, 244, 239, 0.92);
+  color: var(--ink);
+  font-family: var(--font-label), sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.photo-miss-form .photo-miss {
+  position: static;
+}
+
+.photo-frame:hover .photo-miss,
+.photo-frame:focus-within .photo-miss,
+.photo-miss:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .photo-miss {
+    opacity: 0.85;
+  }
+}
+
 .photo-pager {
   display: flex;
   align-items: center;
@@ -183,6 +237,12 @@ h2 { font-size: 1.35rem; }
   font-size: 14px;
 }
 
+/* Линия шапки колонки уже есть — у первого факта вторая сверху не нужна. */
+.fact:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
 .fact__label,
 .fact__value {
   align-self: start;
@@ -201,6 +261,50 @@ h2 { font-size: 1.35rem; }
   font-size: 12px;
   color: var(--muted);
   line-height: 1.4;
+}
+
+.admin-remove {
+  display: inline;
+  margin-left: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+
+.admin-remove:hover,
+.admin-remove:focus-visible {
+  color: var(--ink);
+}
+
+.style-picker__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.45rem;
+  margin: 0.4rem 0 0.6rem;
+}
+
+.style-picker__chip {
+  padding: 0.22rem 0.55rem;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink);
+  transition: background 0.15s, color 0.15s;
+}
+
+.style-picker__chip:hover {
+  background: var(--soft);
+}
+
+.style-picker__chip.is-selected {
+  background: var(--ink);
+  color: var(--paper);
 }
 
 .plain {
@@ -308,6 +412,10 @@ textarea.field { min-height: 6.5rem; resize: vertical; }
   margin-top: 0.8rem;
 }
 
+.instant-edit__text {
+  box-sizing: border-box;
+}
+
 .map-canvas { width: 100%; height: 100%; }
 
 .card-map {
@@ -316,6 +424,34 @@ textarea.field { min-height: 6.5rem; resize: vertical; }
   margin: 0.3rem 0 1.1rem;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
+}
+
+/* История: по умолчанию короткий фрагмент, карта не уезжает вниз. */
+.history-expand { margin: 0 0 0.35rem; }
+
+.history-expand__body.is-collapsed {
+  max-height: 9.5rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.history-expand__body.is-collapsed::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2.6rem;
+  background: linear-gradient(to bottom, transparent, var(--paper));
+  pointer-events: none;
+}
+
+.history-expand__toggle {
+  margin-top: 0.15rem;
+  font-size: 0.85em;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--muted);
 }
 
 .shell--catalog {

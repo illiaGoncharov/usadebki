@@ -186,7 +186,7 @@ export async function sendContributionMail(payload: ContributionMailPayload): Pr
 
   const origin = publicSiteOrigin();
   const estateUrl = `${origin}/estates/${payload.estateSlug}`;
-  const adminUrl = `${origin}/admin`;
+  const adminUrl = `${origin}/admin/queue`;
   const subject = `Усадебки: уточнение — ${payload.estateName}`;
 
   const sourceLine = [payload.sourceTitle, payload.sourcePage ? `с. ${payload.sourcePage}` : null]

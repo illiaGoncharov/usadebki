@@ -1,26 +1,57 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
-import { acceptContribution, logout, rejectContribution } from "@/app/actions";
+import { logout } from "@/app/actions";
 import { Frame } from "@/components/Frame";
-import { listPending } from "@/db/queries";
+import { listContributionsArchive, listInquiriesArchive, listPending, listStatementsHistory } from "@/db/queries";
 import { isAdmin } from "@/lib/admin";
-import { conditionLabel, isConditionId, predicateLabel } from "@/lib/labels";
-import { isStyleId, styleLabel } from "@/lib/reference";
 
-export const metadata: Metadata = { title: "Правки" };
+export const metadata: Metadata = { title: "Админ" };
 
-export default async function AdminPage() {
+export default async function AdminHomePage() {
   if (!(await isAdmin())) redirect("/admin/login");
-  const pending = await listPending();
+
+  const [pending, history, contributions, inquiries] = await Promise.all([
+    listPending(),
+    listStatementsHistory(),
+    listContributionsArchive(),
+    listInquiriesArchive(),
+  ]);
+
+  const items = [
+    {
+      href: "/admin/queue",
+      title: "Очередь правок",
+      hint: "Принять или отклонить то, что прислали через «уточнить».",
+      badge: pending.length > 0 ? `${pending.length} ждут` : null,
+    },
+    {
+      href: "/admin/history",
+      title: "История изменений",
+      hint: "Все принятые и моментальные правки. Можно отменить, если была ошибка.",
+      badge: history.length > 0 ? `${history.length} в истории` : null,
+    },
+    {
+      href: "/admin/archive",
+      title: "Архив краудсорса",
+      hint: "Все правки и обращения с /feedback, включая принятые и отклонённые.",
+      badge: `${contributions.length} правок · ${inquiries.length} писем`,
+    },
+    {
+      href: "/",
+      title: "Каталог",
+      hint: "Вернуться к ленте усадеб.",
+      badge: null,
+    },
+  ] as const;
 
   return (
     <Frame
-      crumb={<span>Правки</span>}
+      crumb={<span>Админ</span>}
       left={
         <div className="prose">
-          <p className="kicker">Очередь</p>
-          <p>Принятая правка становится утверждением со ссылкой на источник. Реестровые поля при этом не меняются.</p>
-          <p>Имена из правки попадают в карточку как владельцы до 1917.</p>
+          <p className="kicker">Редактор</p>
+          <p>После входа через эту страницу видны все служебные разделы. В шапке сайта тоже есть ссылка «Админ».</p>
           <form action={logout}>
             <button className="text-button" type="submit">
               Выйти
@@ -30,69 +61,32 @@ export default async function AdminPage() {
       }
       center={
         <div>
-          <p className="kicker">{pending.length} ждут</p>
-          {pending.length === 0 ? <p>Очередь пустая.</p> : null}
-          {pending.map((item) => (
-            <article key={item.id} className="queue">
-              <p className="kicker">{predicateLabel(item.predicate)}</p>
-              <h2>
-                <a className="text-link" href={`/estates/${item.estateSlug}`}>
-                  {item.estateName}
-                </a>
-              </h2>
-              <p>{readableStatement(item.predicate, item.text)}</p>
-              <p className="muted">
-                {item.authorName}
-                {item.contact ? ` · ${item.contact}` : ""} · {formatWhen(item.createdAt)}
-              </p>
-              <p>
-                {item.sourceTitle}
-                {item.sourcePage ? `, ${item.sourcePage}` : ""}
-                {item.sourceUrl ? (
-                  <>
-                    {" · "}
-                    <a className="text-link" href={item.sourceUrl}>
-                      ссылка
-                    </a>
-                  </>
-                ) : null}
-              </p>
-              <div className="queue__actions">
-                <form action={acceptContribution}>
-                  <input type="hidden" name="id" value={item.id} />
-                  <button className="text-button" type="submit">
-                    Принять
-                  </button>
-                </form>
-                <form action={rejectContribution}>
-                  <input type="hidden" name="id" value={item.id} />
-                  <button className="text-button" type="submit">
-                    Отклонить
-                  </button>
-                </form>
-              </div>
-            </article>
-          ))}
+          <p className="kicker">Разделы</p>
+          <ul className="plain admin-hub">
+            {items.map((item) => (
+              <li key={item.href}>
+                <p style={{ margin: "0 0 0.25rem" }}>
+                  <Link className="text-link" href={item.href}>
+                    {item.title}
+                  </Link>
+                  {item.badge ? <span className="muted"> · {item.badge}</span> : null}
+                </p>
+                <p className="muted" style={{ margin: "0 0 1.2rem", fontSize: "0.92rem" }}>
+                  {item.hint}
+                </p>
+              </li>
+            ))}
+          </ul>
         </div>
       }
       right={
         <div className="prose">
-          <p className="kicker">Проверка</p>
-          <p>Если источник нельзя открыть и факт ни на чём не держится, правку лучше отклонить.</p>
+          <p className="kicker">Локально</p>
+          <p>
+            Снимок архива на диск: <code>npm run crowdsource:archive</code>
+          </p>
         </div>
       }
     />
   );
-}
-
-function readableStatement(predicate: string, text: string) {
-  if (predicate === "condition" && isConditionId(text)) return conditionLabel(text);
-  if (predicate === "style" && isStyleId(text)) return styleLabel(text);
-  return text;
-}
-
-function formatWhen(value: Date | string) {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(date);
 }

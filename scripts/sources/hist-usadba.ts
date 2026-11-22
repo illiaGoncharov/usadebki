@@ -281,7 +281,7 @@ function stripDatesAndTitles(raw: string) {
     const next = text
       .replace(/^(с|до|после|в|от|около|ок\.?)\s+/i, "")
       .replace(/^(конце|начале|середине)\s+/i, "")
-      .replace(/^(?:x{0,3}(?:ix|iv|v?i{0,3})|\d{1,2})\s*в\.?\s*/i, "")
+      .replace(/^(?:[ivx]{2,8}|\d{1,2})\s*в\.?\s+/i, "")
       .replace(/^\d{3,4}(?:\s*[-–—]\s*\d{2,4})?\s*(?:гг?\.?|год[ау]?|в\.?)?\s*/i, "")
       .trim();
     if (next === text) break;
@@ -336,7 +336,11 @@ export function conditionFromPreservation(text: string | null): ConditionId | nu
   if (/не сохрани|полностью утрач|утрачен[аы]|уничтожен|не существует|сгорел[аи]?\s+дотла/.test(value)) {
     return "lost";
   }
-  if (/музей|отреставр|восстановлен/.test(value) && !/руин|разруш|развалин/.test(value)) return "restored";
+  if (/музей/.test(value) && !/руин|разруш|развалин/.test(value)) return "restored_in_use";
+  if (/отреставр|восстановлен/.test(value) && /используется|жилой|школ|больниц|санатор|гостиниц/.test(value)) {
+    return "restored_in_use";
+  }
+  if (/отреставр|восстановлен/.test(value) && !/руин|разруш|развалин/.test(value)) return "restored";
   if (/руин|развалин|разруш|полуразруш/.test(value)) return "ruins";
   if (/заброш|запуст|аварийн/.test(value)) return "neglect";
   if (/хорошем состоян|отличн|используется|жилой дом|школ|больниц|санатор|в приличн/.test(value)) {
@@ -461,10 +465,12 @@ export function matchHistCard(card: HistCard, rows: EstateMatchRow[], regionName
   if (ranked.length === 0) return null;
   const best = ranked[0]!;
   const second = ranked[1];
+  // Слабое совпадение корня без общего села в адресе («Федоровское» и «Федоровских») не берём.
+  const confident = best.score >= 90 || (best.score >= 86 && best.place > 0);
+  if (!confident) return null;
   if (!second) return best.row;
   if (best.score >= second.score + 12) return best.row;
   if (best.place > second.place) return best.row;
-  // Одинаковое имя в области и нет зацепки в адресе — не угадываем.
   return null;
 }
 

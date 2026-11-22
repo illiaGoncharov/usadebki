@@ -3,8 +3,10 @@ export const CONDITIONS = [
   { id: "lost", label: "утрачена" },
   { id: "ruins", label: "руины" },
   { id: "neglect", label: "запустение" },
-  { id: "in_use", label: "используется" },
   { id: "restored", label: "восстановлена" },
+  { id: "in_use", label: "используется" },
+  // Частый случай: и отреставрирована, и в обороте (музей, гостиница, школа…).
+  { id: "restored_in_use", label: "восстановлена и используется" },
 ] as const;
 
 export type ConditionId = (typeof CONDITIONS)[number]["id"];
@@ -22,11 +24,27 @@ export function isPoorConditionFilter(value: string | undefined) {
   return value === "poor" || (value != null && isPoorConditionId(value));
 }
 
+/**
+ * Какие id карточек попадают под выбранный фильтр.
+ * «Восстановлена» и «используется» также включают комбинированный пункт.
+ */
+export function conditionFilterMatches(filterId: string): string[] {
+  if (filterId === "restored") return ["restored", "restored_in_use"];
+  if (filterId === "in_use") return ["in_use", "restored_in_use"];
+  return [filterId];
+}
+
+/** Короткая подсказка редактору у выбора состояния. */
+export const CONDITION_PICK_HINT =
+  "Если здание и восстановлено, и занято — берите «восстановлена и используется». «Используется» — когда занято, но без полной реставрации; «восстановлена» — приведена в порядок, но пустует.";
+
 export const PREDICATES = [
   { id: "condition", label: "состояние" },
   { id: "owners", label: "владельцы до 1917" },
+  { id: "architects", label: "архитектор(ы)" },
   { id: "year", label: "даты" },
   { id: "style", label: "стиль" },
+  { id: "history", label: "история" },
   { id: "note", label: "заметка" },
 ] as const;
 
@@ -64,4 +82,13 @@ export function splitOwnerNames(text: string) {
     .map((line) => line.trim())
     .filter(Boolean)
     .slice(0, 30);
+}
+
+/** «Иванов, Петров и Сидоров» — удобно читать несколько имён. */
+export function formatNameList(names: string[]) {
+  const clean = names.map((name) => name.trim()).filter(Boolean);
+  if (clean.length === 0) return "";
+  if (clean.length === 1) return clean[0]!;
+  if (clean.length === 2) return `${clean[0]} и ${clean[1]}`;
+  return `${clean.slice(0, -1).join(", ")} и ${clean[clean.length - 1]}`;
 }

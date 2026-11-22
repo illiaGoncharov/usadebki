@@ -17,7 +17,7 @@ function testCategories() {
     conditionFromCategories(["Категория:Здания и сооружения, восстановленные из руин"]),
     "restored",
   );
-  assert.equal(conditionFromCategories(["Категория:Музеи-усадьбы России"]), "restored");
+  assert.equal(conditionFromCategories(["Категория:Музеи-усадьбы России"]), "restored_in_use");
   assert.equal(conditionFromCategories(["Категория:Утраченные усадьбы Москвы"]), "lost");
 }
 
@@ -30,14 +30,14 @@ function testText() {
   );
   assert.equal(
     conditionFromText("Музей-усадьба Алексея Николаевича Толстого — здание в Самаре."),
-    "restored",
+    "restored_in_use",
   );
   // Мелихово: в биографии «пришло в запустение», но ввод — музей — не должен быть neglect
   assert.equal(
     conditionFromText(
       "Мелихово — один из главных чеховских музеев в России. Находится в селе Мелихово. Перед отъездом имие продали, после революции пришло в запустение.",
     ),
-    "restored",
+    "restored_in_use",
   );
   assert.equal(
     conditionFromText("Никольское-Прозоровское — заброшенная усадьба князей Прозоровских в Мытищинском районе."),
@@ -45,16 +45,16 @@ function testText() {
   );
   assert.equal(
     conditionFromText("Городская усадьба: в главном здании располагается Музейно-выставочный центр."),
-    "in_use",
+    "restored_in_use",
   );
 }
 
 function testPriority() {
   const picked = pickConditionSignal([
     { condition: "neglect", source: "summary_text", reason: "история" },
-    { condition: "restored", source: "wikipedia_category", reason: "музей" },
+    { condition: "restored_in_use", source: "wikipedia_category", reason: "музей" },
   ]);
-  assert.equal(picked?.condition, "restored");
+  assert.equal(picked?.condition, "restored_in_use");
 }
 
 function main() {

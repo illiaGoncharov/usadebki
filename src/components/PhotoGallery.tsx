@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { PhotoMissControl } from "@/components/PhotoMissControl";
+import { PhotoRelatedLinks } from "@/components/PhotoRelatedLinks";
 
 type Shot = {
   id: string;
@@ -10,7 +12,23 @@ type Shot = {
   sourceUrl: string | null;
 };
 
-export function PhotoGallery({ name, photos }: { name: string; photos: Shot[] }) {
+export function PhotoGallery({
+  name,
+  photos,
+  slug,
+  editor = false,
+  wikipediaTitle,
+  wikipediaUrl,
+  wikidataQid,
+}: {
+  name: string;
+  photos: Shot[];
+  slug: string;
+  editor?: boolean;
+  wikipediaTitle?: string | null;
+  wikipediaUrl?: string | null;
+  wikidataQid?: string | null;
+}) {
   const [index, setIndex] = useState(0);
   const [touchX, setTouchX] = useState<number | null>(null);
   const photo = photos[index] ?? photos[0];
@@ -38,8 +56,17 @@ export function PhotoGallery({ name, photos }: { name: string; photos: Shot[] })
         setTouchX(null);
       }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="photo" src={photo.url} alt={index === 0 ? name : ""} />
+      <div className="photo-frame">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="photo" src={photo.url} alt={index === 0 ? name : ""} />
+        <PhotoMissControl
+          slug={slug}
+          estateName={name}
+          photoUrl={photo.url}
+          editor={editor}
+          photoId={photo.id}
+        />
+      </div>
       {total > 1 ? (
         <div className="photo-pager">
           <button type="button" className="text-button" onClick={() => step(-1)}>
@@ -65,6 +92,11 @@ export function PhotoGallery({ name, photos }: { name: string; photos: Shot[] })
           </>
         ) : null}
       </figcaption>
+      <PhotoRelatedLinks
+        wikipediaTitle={wikipediaTitle}
+        wikipediaUrl={wikipediaUrl}
+        wikidataQid={wikidataQid}
+      />
     </figure>
   );
 }

@@ -13,12 +13,14 @@ import {
   filterRelevantPastVuPhotos,
   isWideEstatePastVu,
   pastVuSearchPages,
+  pastVuSearchRadiusKm,
   pickRelevantPastVuHero,
   scorePastVuRelevance,
   streetNamesFromEstateAddress,
   structureNumberFromPastVuTitle,
   type PastVuEstateContext,
 } from "../src/lib/pastvu-match";
+import { pickPastVuForGallery } from "../src/lib/pastvu-gallery-pick";
 import { pastVuSubject, pickDiversePastVuGallery } from "../src/lib/pastvu-subjects";
 
 function photo(
@@ -133,11 +135,13 @@ check("filter оставляет только релевантные для ко
 check("Почтамт — компактный ансамбль, а не «большой комплекс»", () => {
   assert.equal(isWideEstatePastVu(POCHTAMT), false);
   assert.equal(pastVuSearchPages(POCHTAMT), 2);
+  assert.equal(pastVuSearchRadiusKm(POCHTAMT), 0.25);
 });
 
-check("Кузьминки — большой комплекс: 3 страницы, несколько улиц", () => {
+check("Кузьминки — большой комплекс: 3 страницы, радиус 500 м", () => {
   assert.equal(isWideEstatePastVu(KUZMINKI), true);
   assert.equal(pastVuSearchPages(KUZMINKI), 3);
+  assert.equal(pastVuSearchRadiusKm(KUZMINKI), 0.5);
   const streets = streetNamesFromEstateAddress(KUZMINKI.address);
   assert.ok(streets.some((s) => s.includes("кузьминск")));
   assert.ok(streets.some((s) => s.includes("старые")));
@@ -230,6 +234,32 @@ check("если сюжет один — добираем второй кадр �
   assert.deepEqual(
     out.map((p) => p.year),
     [1900, 1967],
+  );
+});
+
+check("мало кадров с одной подписью — план Б оставляет все ракурсы", () => {
+  const estate: PastVuEstateContext = {
+    name: "Ансамбль усадьбы Оболенских",
+    wikipediaTitle: "Березичи (усадьба)",
+    address: "Калужская область, Козельский район, с. Березичи",
+    displayTitle: "Ансамбль усадьбы Оболенских",
+    objectType: "Ансамбль",
+    lat: 53.97156,
+    lng: 35.81289,
+  };
+  const title = "Березичи. Усадьба Оболенских";
+  const out = pickPastVuForGallery(
+    [
+      photo(title, 1276077, { year: 1900, lat: 53.972, lng: 35.813 }),
+      photo(title, 1276080, { year: 1900, lat: 53.972, lng: 35.813 }),
+      photo(title, 1276084, { year: 1900, lat: 53.9721, lng: 35.8131 }),
+    ],
+    estate,
+  );
+  assert.equal(out.length, 3, `ожидали 3 кадра, получили ${out.length}`);
+  assert.deepEqual(
+    out.map((p) => p.cid).sort((a, b) => a - b),
+    [1276077, 1276080, 1276084],
   );
 });
 

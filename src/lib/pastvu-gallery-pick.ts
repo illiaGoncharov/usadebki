@@ -8,9 +8,15 @@ import {
 import { isPeoplePastVuPhoto, pickDiversePastVuGallery } from "@/lib/pastvu-subjects";
 
 export const PASTVU_GALLERY_TARGET = 4;
+/** Если после строгого отбора кадров меньше — включаем план Б и добираем всё ближайшее. */
+export const PASTVU_GALLERY_MIN_FILL = 3;
 
 function normalize(title: string) {
   return title.toLowerCase().replace(/ё/g, "е");
+}
+
+function titleKey(photo: PastVuPhoto) {
+  return normalize(photo.title ?? "").replace(/\s+/g, " ").slice(0, 80);
 }
 
 /** Топоним из адреса и имени — для мягкого добора кадров. */
@@ -31,6 +37,8 @@ function localityHints(address: string | null | undefined, name: string) {
 
 /**
  * До target кадров в блоке PastVu: релевантные + разнообразие сюжетов + добор по рейтингу.
+ * План Б: если после фильтров кадров меньше MIN_FILL — берём ближайшие из всей выборки,
+ * даже с одинаковой подписью (иначе у редких усадеб остаётся один кадр из трёх хороших).
  */
 export function pickPastVuForGallery(
   allPhotos: PastVuPhoto[],
@@ -51,20 +59,31 @@ export function pickPastVuForGallery(
   const seen = new Set(picked.map((p) => p.cid));
   if (heroCid != null) seen.add(heroCid);
 
+  // Дедуп по подписи — только если после него останется достаточно кадров.
+  // У Оболенских три разных снимка с одной подписью «Березичи. Усадьба Оболенских».
   const titleKeys = new Set<string>();
-  picked = picked.filter((p) => {
-    const titleKey = normalize(p.title ?? "").replace(/\s+/g, " ").slice(0, 80);
-    if (titleKey && titleKeys.has(titleKey)) return false;
-    if (titleKey) titleKeys.add(titleKey);
+  const dedupedByTitle = picked.filter((p) => {
+    const key = titleKey(p);
+    if (key && titleKeys.has(key)) return false;
+    if (key) titleKeys.add(key);
     return true;
   });
-  const add = (photo: PastVuPhoto) => {
+  if (dedupedByTitle.length >= PASTVU_GALLERY_MIN_FILL || dedupedByTitle.length === picked.length) {
+    picked = dedupedByTitle;
+  } else {
+    for (const p of picked) {
+      const key = titleKey(p);
+      if (key) titleKeys.add(key);
+    }
+  }
+
+  const add = (photo: PastVuPhoto, allowSameTitle = false) => {
     if (picked.length >= target || seen.has(photo.cid)) return;
     if (isPeoplePastVuPhoto(photo)) return;
-    const titleKey = normalize(photo.title ?? "").replace(/\s+/g, " ").slice(0, 80);
-    if (titleKey && titleKeys.has(titleKey)) return;
+    const key = titleKey(photo);
+    if (!allowSameTitle && key && titleKeys.has(key)) return;
     seen.add(photo.cid);
-    if (titleKey) titleKeys.add(titleKey);
+    if (key) titleKeys.add(key);
     picked.push(photo);
   };
 
@@ -72,7 +91,7 @@ export function pickPastVuForGallery(
     .map((p) => ({ p, s: scorePastVuGalleryRelevance(p, ctx) }))
     .filter((row) => row.s >= 0)
     .sort((a, b) => b.s - a.s || a.p.cid - b.p.cid)) {
-    add(row.p);
+    add(row.p, false);
     if (picked.length >= target) break;
   }
 
@@ -83,7 +102,25 @@ export function pickPastVuForGallery(
       const title = normalize(photo.title ?? "");
       const near = distanceMeters(ctx.lat, ctx.lng, photo.lat, photo.lng) <= 600;
       const topical = hints.some((h) => title.includes(h));
-      if (near && topical) add(photo);
+      if (near && topical) add(photo, false);
+    }
+  }
+
+  // План Б: строгий отбор дал мало кадров — добираем ближайшие из всей выборки.
+  // Одинаковые подписи разрешены: это часто разные ракурсы одного здания.
+  if (picked.length < PASTVU_GALLERY_MIN_FILL) {
+    const fillTo = Math.min(target, allPhotos.length);
+    const candidates =
+      ctx.lat != null && ctx.lng != null
+        ? [...allPhotos].sort(
+            (a, b) =>
+              distanceMeters(ctx.lat!, ctx.lng!, a.lat, a.lng) -
+                distanceMeters(ctx.lat!, ctx.lng!, b.lat, b.lng) || a.cid - b.cid,
+          )
+        : allPhotos;
+    for (const photo of candidates) {
+      if (picked.length >= fillTo) break;
+      add(photo, true);
     }
   }
 

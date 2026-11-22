@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies, headers } from "next/headers";
 import { CatalogFilters } from "@/components/CatalogFilters";
 import { EstateReel } from "@/components/EstateReel";
 import { catalogHref, type CatalogLink } from "@/lib/catalog-url";
@@ -6,6 +7,7 @@ import { isConditionId } from "@/lib/labels";
 import { guberniaById, isDistanceId, isEraId, isKindId, isRankId, isStyleId, KINDS, RANKS } from "@/lib/reference";
 import { listEstates, listRegions } from "@/db/queries";
 import { loosenPlace } from "@/lib/search";
+import { REEL_SEED_COOKIE, REEL_SEED_HEADER, isReelSeed } from "@/lib/reel-seed";
 
 type Search = {
   region?: string;
@@ -27,6 +29,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const params = await searchParams;
   const filters = readFilters(params);
   const regionIds = regionIdsFor(filters.region, filters.gubernia);
+  const shuffleSeed = await readReelSeed();
   const [regions, list] = await Promise.all([
     listRegions(),
     listEstates({
@@ -41,6 +44,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       text: filters.text,
       q: filters.q ? `%${loosenPlace(filters.q)}%` : undefined,
       page: filters.page,
+      shuffleSeed,
     }),
   ]);
   const regionName = regions.find((item) => item.regionId === filters.region)?.regionName;
@@ -124,5 +128,14 @@ function emptyCopy(filters: CatalogLink) {
     return "В этом срезе пока ничего нет. Состояние появится, когда его отметят в карточке.";
   }
   return "В этом срезе пока ничего нет.";
+}
+
+/** Seed из middleware (header) или cookie — один на сессию браузера. */
+async function readReelSeed() {
+  const headerSeed = (await headers()).get(REEL_SEED_HEADER);
+  if (isReelSeed(headerSeed)) return headerSeed;
+  const cookieSeed = (await cookies()).get(REEL_SEED_COOKIE)?.value;
+  if (isReelSeed(cookieSeed)) return cookieSeed;
+  return null;
 }
 

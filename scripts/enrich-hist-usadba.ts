@@ -8,7 +8,7 @@
  *   npm run enrich:hist-usadba
  *   npm run enrich:hist-usadba -- --dry-run
  *   npm run enrich:hist-usadba -- --region=калуж
- *   npm run enrich:hist-usadba -- --limit=40
+ *   npm run enrich:hist-usadba -- --cache-only
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -24,9 +24,12 @@ import {
   parseEstateHtml,
   regionsForLabel,
   fetchHistHtml,
+  histNetworkFails,
+  readHistCache,
 } from "./sources/hist-usadba";
 
 const DRY_RUN = process.argv.includes("--dry-run");
+const CACHE_ONLY = process.argv.includes("--cache-only");
 const ORIGIN = "hist-usadba";
 const regionArg = process.argv.find((arg) => arg.startsWith("--region="))?.split("=")[1]?.toLowerCase();
 const limitArg = Number(process.argv.find((arg) => arg.startsWith("--limit="))?.split("=")[1] ?? "0");
@@ -99,9 +102,21 @@ async function main() {
 
   const cards: HistCard[] = [];
   let empty = 0;
+  let failureStreak = 0;
+  let offline = false;
   for (let index = 0; index < pages.length; index += 1) {
     const page = pages[index]!;
-    const html = await fetchHistHtml(page.url);
+    const failsBefore = histNetworkFails();
+    const html = offline || CACHE_ONLY ? await readHistCache(page.url) : await fetchHistHtml(page.url);
+    if (!offline && histNetworkFails() > failsBefore) {
+      failureStreak += 1;
+      if (failureStreak >= 3) {
+        offline = true;
+        console.log("Сайт перестал отвечать. Дальше только уже скачанные страницы, остальное — следующим запуском.");
+      }
+    } else if (html) {
+      failureStreak = 0;
+    }
     if (!html) {
       empty += 1;
       continue;

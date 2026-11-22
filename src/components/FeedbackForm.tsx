@@ -11,11 +11,14 @@ export function FeedbackForm({
   estateSlug,
   estateName,
   pageUrl,
+  wrongPhotoUrl,
 }: {
   topic: "general" | "photo";
   estateSlug?: string;
   estateName?: string;
   pageUrl?: string;
+  /** Снимок с карточки, который пользователь отметил «мимо». */
+  wrongPhotoUrl?: string;
 }) {
   const [state, action, pending] = useActionState(submitInquiry, initial);
 
@@ -37,9 +40,34 @@ export function FeedbackForm({
       {estateSlug ? <input type="hidden" name="estateSlug" value={estateSlug} /> : null}
       {estateName ? <input type="hidden" name="estateName" value={estateName} /> : null}
       {pageUrl ? <input type="hidden" name="pageUrl" value={pageUrl} /> : null}
+      {wrongPhotoUrl ? <input type="hidden" name="wrongPhotoUrl" value={wrongPhotoUrl} /> : null}
+
+      {topic === "photo" && wrongPhotoUrl ? (
+        <div style={{ margin: "0 0 1rem" }}>
+          <p className="kicker">Снимок с карточки</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={wrongPhotoUrl}
+            alt=""
+            style={{
+              display: "block",
+              width: "100%",
+              maxHeight: "12rem",
+              objectFit: "cover",
+              background: "var(--photo)",
+              marginBottom: "0.4rem",
+            }}
+          />
+          <p className="muted" style={{ fontSize: "0.85rem" }}>
+            <a className="text-link" href={wrongPhotoUrl} target="_blank" rel="noopener noreferrer">
+              открыть снимок
+            </a>
+          </p>
+        </div>
+      ) : null}
 
       <label className="kicker" htmlFor="message">
-        {topic === "photo" ? "Что не так со снимком" : "Сообщение"}
+        {topic === "photo" ? "Почему считаете, что мимо" : "Сообщение"}
       </label>
       <textarea
         id="message"
@@ -50,7 +78,7 @@ export function FeedbackForm({
         maxLength={4000}
         placeholder={
           topic === "photo"
-            ? "Например: в шапке сад, а не дом Толстого; есть снимок на Commons …"
+            ? "Например: на снимке соседний флигель / другой адрес / интерьер не этой усадьбы"
             : "Вопрос, идея или замечание по каталогу"
         }
       />
@@ -65,7 +93,7 @@ export function FeedbackForm({
             name="suggestedPhotoUrl"
             className="field"
             type="url"
-            placeholder="https://commons.wikimedia.org/wiki/File:…"
+            placeholder="https://commons.wikimedia.org/wiki/File:… или pastvu.com/p/…"
           />
 
           <label className="kicker" htmlFor="attachment">
