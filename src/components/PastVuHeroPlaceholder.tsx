@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PhotoMissControl } from "@/components/PhotoMissControl";
+import { PhotoAddForm } from "@/components/PhotoGallery";
 import { PhotoRelatedLinks } from "@/components/PhotoRelatedLinks";
 import { formatPastVuYear, type PastVuPhoto } from "@/lib/pastvu";
 
@@ -12,9 +13,8 @@ type Props = {
   estateName: string;
   slug: string;
   editor?: boolean;
-  wikipediaTitle?: string | null;
+  commonsUrl?: string | null;
   wikipediaUrl?: string | null;
-  wikidataQid?: string | null;
 };
 
 function skipKey(slug: string) {
@@ -51,9 +51,8 @@ export function PastVuHeroPlaceholder({
   estateName,
   slug,
   editor = false,
-  wikipediaTitle,
+  commonsUrl,
   wikipediaUrl,
-  wikidataQid,
 }: Props) {
   const pool = useMemo(() => {
     const map = new Map<number, PastVuPhoto>();
@@ -119,11 +118,12 @@ export function PastVuHeroPlaceholder({
           открыть на PastVu
         </a>
       </figcaption>
-      <PhotoRelatedLinks
-        wikipediaTitle={wikipediaTitle}
-        wikipediaUrl={wikipediaUrl}
-        wikidataQid={wikidataQid}
-      />
+      <PhotoRelatedLinks commonsUrl={commonsUrl} wikipediaUrl={wikipediaUrl} />
+      {editor ? (
+        <div className="photo-editor-bar">
+          <PhotoAddForm slug={slug} role="main" label="+ главное фото" />
+        </div>
+      ) : null}
     </figure>
   );
 }

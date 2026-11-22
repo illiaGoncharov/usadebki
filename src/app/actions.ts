@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { contributions, estatePeople, estates, inquiries, photos } from "@/db/schema";
+import { contributions, estatePeople, estates, inquiries } from "@/db/schema";
 import { adminCookie, adminToken, isAdmin } from "@/lib/admin";
 import { safeAdminReturn } from "@/lib/admin-return";
 import {
@@ -30,7 +30,23 @@ import {
   sendInquiryMail,
   sendInquiryThanksMail,
 } from "@/lib/mail";
+import { parsePhotoInput } from "@/lib/photo";
+import {
+  addEstatePhotoLogged,
+  fillEnsembleFromCommonsLogged,
+  hideEstatePhotoLogged,
+  setEnsembleEstatePhotoLogged,
+  setPrimaryEstatePhotoLogged,
+} from "@/lib/photo-edit-log";
 import { areValidStyleIds, formatStyleLabels } from "@/lib/reference";
+
+function revalidatePhotoPaths(slug: string) {
+  revalidatePath(`/estates/${slug}`);
+  revalidatePath(`/admin/estates/${slug}/history`);
+  revalidatePath("/admin/history");
+  revalidatePath("/admin");
+  revalidatePath("/");
+}
 
 export type FormState = {
   error: string | null;
@@ -169,6 +185,9 @@ async function submitContributionImpl(formData: FormData): Promise<FormState> {
 
   if (!slug || !isPredicateId(predicate)) return { error: "Не понял, какое поле вы уточняете." };
   if (!body) return { error: "Напишите, что именно известно." };
+  if (predicate === "title" && body.length > 160) {
+    return { error: "Название слишком длинное — до 160 символов, как на карточке." };
+  }
   const maxLen = predicate === "history" ? 12000 : 4000;
   if (body.length > maxLen) {
     return {
@@ -311,6 +330,10 @@ export async function submitInstantEdit(formData: FormData) {
   if (!body) {
     redirect(returnTo || `/estates/${slug}`);
   }
+  // Название на карточке — короткое; длинный паспорт оставляем в реестре.
+  if (predicate === "title" && body.length > 160) {
+    redirect(returnTo || `/estates/${slug}`);
+  }
 
   let success = false;
   try {
@@ -375,23 +398,68 @@ export async function hideEstatePhoto(formData: FormData) {
   await assertAdmin();
   const id = text(formData.get("id"));
   const slug = text(formData.get("slug"));
-  if (!id || !slug) redirect(slug ? `/estates/${slug}` : "/");
+  const returnTo = safeAdminReturn(text(formData.get("returnTo")), "");
+  if (!id || !slug) redirect(returnTo || (slug ? `/estates/${slug}` : "/"));
 
-  const [estate] = await db
-    .select({ id: estates.id })
-    .from(estates)
-    .where(eq(estates.slug, slug))
-    .limit(1);
-  if (!estate) redirect("/");
+  await hideEstatePhotoLogged(slug, id);
+  revalidatePhotoPaths(slug);
+  redirect(returnTo || `/estates/${slug}`);
+}
 
-  await db
-    .update(photos)
-    .set({ isHidden: true, isPrimary: false })
-    .where(and(eq(photos.id, id), eq(photos.estateId, estate.id)));
+/** Админ: сделать снимок главным (и убрать из ансамбля, если был). */
+export async function setPrimaryEstatePhoto(formData: FormData) {
+  await assertAdmin();
+  const id = text(formData.get("id"));
+  const slug = text(formData.get("slug"));
+  const returnTo = safeAdminReturn(text(formData.get("returnTo")), "");
+  if (!id || !slug) redirect(returnTo || (slug ? `/estates/${slug}` : "/"));
 
-  revalidatePath(`/estates/${slug}`);
-  revalidatePath("/");
-  redirect(`/estates/${slug}`);
+  await setPrimaryEstatePhotoLogged(slug, id);
+  revalidatePhotoPaths(slug);
+  redirect(returnTo || `/estates/${slug}`);
+}
+
+/** Админ: перенести снимок в «части ансамбля» (или оставить там). */
+export async function setEnsembleEstatePhoto(formData: FormData) {
+  await assertAdmin();
+  const id = text(formData.get("id"));
+  const slug = text(formData.get("slug"));
+  const returnTo = safeAdminReturn(text(formData.get("returnTo")), "");
+  if (!id || !slug) redirect(returnTo || (slug ? `/estates/${slug}` : "/"));
+
+  await setEnsembleEstatePhotoLogged(slug, id);
+  revalidatePhotoPaths(slug);
+  redirect(returnTo || `/estates/${slug}`);
+}
+
+/**
+ * Админ: добавить снимок по URL (Commons или любой https).
+ * Если такой URL уже есть — возвращаем из скрытых и выставляем роль.
+ */
+export async function addEstatePhoto(formData: FormData) {
+  await assertAdmin();
+  const slug = text(formData.get("slug"));
+  const role = text(formData.get("role")) === "ensemble" ? "ensemble" : "main";
+  const returnTo = safeAdminReturn(text(formData.get("returnTo")), "");
+  const rawUrl = text(formData.get("photoUrl")) || text(formData.get("commonsUrl"));
+  const parsed = parsePhotoInput(rawUrl);
+  if (!slug || !parsed) redirect(returnTo || (slug ? `/estates/${slug}` : "/"));
+
+  await addEstatePhotoLogged(slug, parsed, role);
+  revalidatePhotoPaths(slug);
+  redirect(returnTo || `/estates/${slug}`);
+}
+
+/** Админ: добрать части ансамбля из категории Commons. */
+export async function fillEnsemblePhotosFromCommons(formData: FormData) {
+  await assertAdmin();
+  const slug = text(formData.get("slug"));
+  const returnTo = safeAdminReturn(text(formData.get("returnTo")), "");
+  if (!slug) redirect(returnTo || "/");
+
+  await fillEnsembleFromCommonsLogged(slug);
+  revalidatePhotoPaths(slug);
+  redirect(returnTo || `/estates/${slug}`);
 }
 
 /** Убрать человека (архитектора / владельца) с карточки. */

@@ -72,27 +72,30 @@ export function splitRegistryEstateName(fullName: string): {
 /**
  * Заголовок для UI: короткое имя; ценный хвост паспорта — в начало «Истории».
  * Если есть статья Википедии и паспорт длинный — часто берём вики-заголовок.
+ * `titleOverride` — моментальная правка редактора (перекрывает автовыбор).
  */
 export function estateDisplayTitle(
   fullName: string,
   wikipediaTitle?: string | null,
+  titleOverride?: string | null,
 ): { title: string; registryNote: string | null } {
   const full = fullName.trim().replace(/\s+/g, " ");
   const split = splitRegistryEstateName(full);
+  const override = titleOverride?.trim();
   const wiki = wikipediaTitle?.trim();
   const passportIsLong = full.length > MAX_TITLE_LEN || split.registryNote != null;
 
   // Вики короче и читаемее длинного паспорта — но не подменяем, если вики ещё длиннее.
   const preferWiki = Boolean(wiki && passportIsLong && wiki.length <= Math.max(split.title.length, MAX_TITLE_LEN));
-  const title = preferWiki ? wiki! : split.title;
+  const title = override || (preferWiki ? wiki! : split.title);
 
   // В историю кладём только то, чего нет в коротком заголовке (не дублируем h1).
   let registryNote: string | null = null;
   if (title !== full) {
     if (full.toLowerCase().startsWith(title.toLowerCase())) {
       registryNote = full.slice(title.length).replace(/^[,;.\s\-–—]+/u, "").trim() || null;
-    } else if (split.registryNote) {
-      // Заголовок из вики: в историю — весь паспорт, если он ценнее одной строки вики.
+    } else if (split.registryNote || override || preferWiki) {
+      // Заголовок из вики / правки редактора: в историю — паспорт, если он ценнее одной строки.
       registryNote = full;
     } else {
       registryNote = full;

@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   const { slug } = await params;
   const estate = await getEstate(slug);
   if (!estate) return { title: "История карточки" };
-  const { title } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
+  const { title } = estateDisplayTitle(estate.name, estate.wikipediaTitle, estate.titleOverride);
   return { title: `История · ${title}` };
 }
 
@@ -27,7 +27,7 @@ export default async function EstateAdminHistoryPage({ params }: { params: Promi
   if (!estate) notFound();
 
   const history = await listStatementsHistory(slug);
-  const { title: displayName } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
+  const { title: displayName } = estateDisplayTitle(estate.name, estate.wikipediaTitle, estate.titleOverride);
   const activeCount = history.filter((item) => item.status === "accepted").length;
   const revokedCount = history.filter((item) => item.status === "revoked").length;
   const returnTo = `/admin/estates/${slug}/history`;
@@ -73,10 +73,13 @@ export default async function EstateAdminHistoryPage({ params }: { params: Promi
         <div className="prose">
           <p className="kicker">Что можно сделать</p>
           <p>
-            <strong>Отменить</strong> — убрать ошибочную правку с карточки (статус <code>revoked</code>).
+            <strong>Отменить</strong> — убрать ошибочную правку с карточки (для фото — вернуть прежний снимок).
           </p>
           <p>
             <strong>Править</strong> — сразу записать новое значение поверх (как «моментально» на карточке).
+          </p>
+          <p>
+            <strong>Подгрузить снимок</strong> — у фото-правки вставить другой файл с Commons.
           </p>
           <p>
             <strong>Восстановить</strong> — вернуть отозванную правку обратно в показ.

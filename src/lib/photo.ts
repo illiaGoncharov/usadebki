@@ -120,10 +120,9 @@ function isPlace(name: string) {
   );
 }
 
-/** Одно лучшее фото для шапки карточки и ленты — та же логика, что в listEstates (SQL). */
-export function pickHeroPhoto<T extends { url: string; isPrimary: boolean }>(rows: T[]): T[] {
-  if (rows.length === 0) return [];
-  const sorted = [...rows].sort((a, b) => {
+/** Все снимки главного здания: is_primary первым, затем по «похожести» на дом. */
+export function sortGalleryPhotos<T extends { url: string; isPrimary: boolean }>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => {
     const rankA = photoRank(photoKind(a.url));
     const rankB = photoRank(photoKind(b.url));
     const deprioritizeA = rankA >= 3 ? 1 : 0;
@@ -132,7 +131,79 @@ export function pickHeroPhoto<T extends { url: string; isPrimary: boolean }>(row
     if (Number(b.isPrimary) !== Number(a.isPrimary)) return Number(b.isPrimary) - Number(a.isPrimary);
     return rankA - rankB || a.url.localeCompare(b.url, "ru");
   });
-  return [sorted[0]!];
+}
+
+/** Одно лучшее фото для шапки карточки и ленты — та же логика, что в listEstates (SQL). */
+export function pickHeroPhoto<T extends { url: string; isPrimary: boolean }>(rows: T[]): T[] {
+  const sorted = sortGalleryPhotos(rows);
+  return sorted.length > 0 ? [sorted[0]!] : [];
+}
+
+export type ParsedPhotoInput = {
+  url: string;
+  sourceUrl: string;
+  filename: string | null;
+  origin: "commons" | "external";
+};
+
+/**
+ * Разбор ссылки Commons / имени файла → URL для карточки и страница файла.
+ * Принимает File:…, Special:FilePath/…, upload.wikimedia.org, голое имя.
+ */
+export function parseCommonsPhotoInput(raw: string): ParsedPhotoInput | null {
+  const input = raw.trim();
+  if (!input) return null;
+
+  let filename = "";
+  const fileMatch = input.match(/(?:wiki\/)?File:([^?#]+)/i);
+  const pathMatch = input.match(/Special:FilePath\/([^?#]+)/i);
+  const uploadMatch = input.match(/\/wikipedia\/commons\/(?:thumb\/)?[0-9a-f]\/[0-9a-f]{2}\/([^/?#]+)/i);
+
+  if (fileMatch?.[1]) {
+    filename = fileMatch[1];
+  } else if (pathMatch?.[1]) {
+    filename = pathMatch[1];
+  } else if (uploadMatch?.[1]) {
+    filename = uploadMatch[1];
+  } else if (!/^https?:\/\//i.test(input) && /\.(jpe?g|png|gif|webp|tif{1,2}|svg)$/i.test(input)) {
+    filename = input.replace(/^File:/i, "");
+  } else {
+    return null;
+  }
+
+  try {
+    filename = decodeURIComponent(filename.replace(/_/g, " ")).trim();
+  } catch {
+    filename = filename.replace(/_/g, " ").trim();
+  }
+  if (!filename) return null;
+
+  const encoded = encodeURIComponent(filename.replace(/ /g, "_"));
+  return {
+    filename,
+    url: `https://commons.wikimedia.org/wiki/Special:FilePath/${encoded}?width=1600`,
+    sourceUrl: `https://commons.wikimedia.org/wiki/File:${encoded}`,
+    origin: "commons",
+  };
+}
+
+/**
+ * Любой источник: сначала Commons, иначе прямая https-ссылка на кадр
+ * (PastVu, музей, CDN — редактор отвечает за качество).
+ */
+export function parsePhotoInput(raw: string): ParsedPhotoInput | null {
+  const commons = parseCommonsPhotoInput(raw);
+  if (commons) return commons;
+
+  const input = raw.trim();
+  if (!/^https:\/\//i.test(input)) return null;
+  try {
+    const parsed = new URL(input);
+    if (parsed.protocol !== "https:") return null;
+  } catch {
+    return null;
+  }
+  return { url: input, sourceUrl: input, filename: null, origin: "external" };
 }
 
 /** Парк, аллея, лестница в лесопарке — не главный дом, даже если в подписи есть «усадьба». */

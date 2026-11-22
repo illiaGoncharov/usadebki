@@ -139,6 +139,12 @@ h2 { font-size: 1.35rem; }
   margin-bottom: 1.3rem;
 }
 
+/* После ссылок Commons — действия редактора без наезда на текст. */
+.photo-block .caption.photo-related-links + .photo-editor-bar {
+  margin-top: -0.55rem;
+  margin-bottom: 1.1rem;
+}
+
 /* Обёртка снимка: «мимо» появляется слева внизу при наведении. */
 .photo-frame {
   position: relative;
@@ -966,6 +972,87 @@ textarea.field { min-height: 6.5rem; resize: vertical; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Превью снимка в админ-истории правок. */
+.history-photo {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+  margin: 0.35rem 0 0.5rem;
+}
+
+.history-photo__thumb {
+  width: 5.5rem;
+  height: 3.6rem;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--wash, #f8f6f3);
+}
+
+.history-photo__prev {
+  width: 2.4rem;
+  height: 1.6rem;
+  object-fit: cover;
+  vertical-align: middle;
+  margin-left: 0.25rem;
+}
+
+/* Быстрые действия редактора под снимком — коротко, как подпись. */
+.photo-editor-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.35rem;
+  margin-top: 0.35rem;
+  margin-bottom: 0.85rem;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.photo-editor-bar form {
+  display: inline;
+  margin: 0;
+}
+
+.photo-editor-bar__sep {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.photo-edit-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.photo-edit-link:hover {
+  color: var(--ink);
+}
+
+.photo-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.photo-add-form .field {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+  margin: 0;
+  padding: 0.25rem 0;
 }
 
 /* Ensemble Parts Gallery */

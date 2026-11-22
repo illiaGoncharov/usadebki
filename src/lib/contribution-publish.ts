@@ -283,6 +283,12 @@ export async function revokeStatementById(statementId: string) {
 
   if (!statement) return null;
 
+  // Фото-правки откатывают флаги снимков — отдельный путь.
+  if (statement.predicate === "photo") {
+    const { undoPhotoEdit } = await import("@/lib/photo-edit-log");
+    return undoPhotoEdit(statementId);
+  }
+
   await db.transaction(async (tx) => {
     await tx
       .update(statements)
@@ -322,6 +328,11 @@ export async function restoreStatementById(statementId: string) {
     .limit(1);
 
   if (!statement) return null;
+
+  if (statement.predicate === "photo") {
+    const { redoPhotoEdit } = await import("@/lib/photo-edit-log");
+    return redoPhotoEdit(statementId);
+  }
 
   await db.transaction(async (tx) => {
     await tx

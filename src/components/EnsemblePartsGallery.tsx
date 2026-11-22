@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { fillEnsemblePhotosFromCommons, hideEstatePhoto, setPrimaryEstatePhoto } from "@/app/actions";
+import { PhotoAddForm } from "@/components/PhotoGallery";
 
 type Photo = {
   id: string;
@@ -14,6 +16,8 @@ type Photo = {
 type Props = {
   photos: Photo[];
   parts: Array<{ egrknRegNumber: string; name: string }>;
+  slug?: string;
+  editor?: boolean;
 };
 
 function partLabel(photo: Photo, parts: Props["parts"]) {
@@ -24,14 +28,16 @@ function partLabel(photo: Photo, parts: Props["parts"]) {
 /**
  * Галерея фотографий частей ансамбля (флигели, церкви и т.д.)
  * Превью с листанием; по клику — лайтбокс в полном размере.
+ * Редактор: короткое меню + добор с Commons.
  */
-export function EnsemblePartsGallery({ photos, parts }: Props) {
+export function EnsemblePartsGallery({ photos, parts, slug, editor = false }: Props) {
   const total = photos.length;
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState(false);
 
   const step = useCallback(
     (delta: number) => {
+      if (total === 0) return;
       setIndex((current) => (current + delta + total) % total);
     },
     [total],
@@ -55,12 +61,11 @@ export function EnsemblePartsGallery({ photos, parts }: Props) {
     };
   }, [lightbox, close, step]);
 
-  if (photos.length === 0) return null;
+  // Без снимков блок нужен только редактору — чтобы сразу добавить.
+  if (photos.length === 0 && !editor) return null;
 
-  const photo = photos[index] ?? photos[0];
-  if (!photo) return null;
-
-  const partName = partLabel(photo, parts);
+  const photo = photos[index] ?? photos[0] ?? null;
+  const partName = photo ? partLabel(photo, parts) : "часть ансамбля";
 
   return (
     <div className="ensemble-parts-block">
@@ -68,43 +73,97 @@ export function EnsemblePartsGallery({ photos, parts }: Props) {
         Другие части ансамбля
       </p>
       <p className="muted" style={{ fontSize: "0.85rem", marginBottom: "0.8rem" }}>
-        Фотографии отдельных частей ансамбля (флигели, церкви, парк). Нажмите на снимок, чтобы открыть в полном
-        размере.
+        Фотографии отдельных частей ансамбля (флигели, церкви, парк).
+        {!editor ? " Нажмите на снимок, чтобы открыть в полном размере." : null}
       </p>
 
-      <figure className="photo-block">
-        {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/no-noninteractive-element-to-interactive-role */}
-        <img
-          className="photo ensemble-parts-open"
-          src={photo.url}
-          alt={partName}
-          role="button"
-          tabIndex={0}
-          onClick={() => setLightbox(true)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              setLightbox(true);
-            }
-          }}
-        />
+      {photo ? (
+        <figure className="photo-block">
+          {/* eslint-disable-next-line @next/next/no-img-element, jsx-a11y/no-noninteractive-element-to-interactive-role */}
+          <img
+            className="photo ensemble-parts-open"
+            src={photo.url}
+            alt={partName}
+            role="button"
+            tabIndex={0}
+            onClick={() => setLightbox(true)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setLightbox(true);
+              }
+            }}
+          />
 
-        {total > 1 ? (
-          <div className="photo-pager">
-            <button type="button" className="text-button" onClick={() => step(-1)}>
-              Назад
-            </button>
-            <span>
-              {index + 1} / {total}
-            </span>
-            <button type="button" className="text-button" onClick={() => step(1)}>
-              Дальше
-            </button>
-          </div>
-        ) : null}
-      </figure>
+          {total > 1 ? (
+            <div className="photo-pager">
+              <button type="button" className="text-button" onClick={() => step(-1)}>
+                Назад
+              </button>
+              <span>
+                {index + 1} / {total}
+              </span>
+              <button type="button" className="text-button" onClick={() => step(1)}>
+                Дальше
+              </button>
+            </div>
+          ) : null}
 
-      {lightbox ? (
+          {editor && slug ? (
+            <div className="photo-editor-bar">
+              <form action={setPrimaryEstatePhoto}>
+                <input type="hidden" name="id" value={photo.id} />
+                <input type="hidden" name="slug" value={slug} />
+                <button type="submit" className="photo-edit-link" title="Сделать главным фото карточки">
+                  главное
+                </button>
+              </form>
+              <span className="photo-editor-bar__sep" aria-hidden>
+                ·
+              </span>
+              <form action={hideEstatePhoto}>
+                <input type="hidden" name="id" value={photo.id} />
+                <input type="hidden" name="slug" value={slug} />
+                <button type="submit" className="photo-edit-link" title="Скрыть снимок">
+                  убрать
+                </button>
+              </form>
+              <span className="photo-editor-bar__sep" aria-hidden>
+                ·
+              </span>
+              <PhotoAddForm slug={slug} role="ensemble" label="+ фото" />
+              <span className="photo-editor-bar__sep" aria-hidden>
+                ·
+              </span>
+              <form action={fillEnsemblePhotosFromCommons}>
+                <input type="hidden" name="slug" value={slug} />
+                <button type="submit" className="photo-edit-link" title="Подтянуть ещё файлы из категории Commons">
+                  ещё с Commons
+                </button>
+              </form>
+            </div>
+          ) : null}
+        </figure>
+      ) : editor && slug ? (
+        <div className="photo-editor-bar" style={{ marginTop: "0.4rem" }}>
+          <span className="muted">пусто</span>
+          <span className="photo-editor-bar__sep" aria-hidden>
+            ·
+          </span>
+          <PhotoAddForm slug={slug} role="ensemble" label="+ фото" />
+          <span className="photo-editor-bar__sep" aria-hidden>
+            ·
+          </span>
+          <form action={fillEnsemblePhotosFromCommons}>
+            <input type="hidden" name="slug" value={slug} />
+            <button type="submit" className="photo-edit-link" title="Подтянуть файлы из категории Commons">
+              ещё с Commons
+            </button>
+          </form>
+        </div>
+      ) : null}
+
+      {lightbox && photo ? (
         <div
           className="pastvu-lightbox"
           role="dialog"

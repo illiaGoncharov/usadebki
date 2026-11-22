@@ -13,7 +13,7 @@ import { InstantEdit } from "@/components/InstantEdit";
 import { OwnersList } from "@/components/OwnersList";
 import { PastVuGallery } from "@/components/PastVuGallery";
 import { PastVuHeroPlaceholder } from "@/components/PastVuHeroPlaceholder";
-import { PhotoGallery } from "@/components/PhotoGallery";
+import { PhotoAddForm, PhotoGallery } from "@/components/PhotoGallery";
 import { RegistryNote } from "@/components/RegistryNote";
 import { SupportThanksBanner } from "@/components/SupportThanksBanner";
 import { canonicalSlugFor, getEstate, listStatementsHistory } from "@/db/queries";
@@ -21,6 +21,7 @@ import { isAdmin } from "@/lib/admin";
 import { formatWhen, isEditorialSourceTitle, predicateLabel } from "@/lib/admin-history-format";
 import { cartoKey } from "@/lib/carto";
 import { catalogHref } from "@/lib/catalog-url";
+import { resolveCommonsGalleryUrl } from "@/lib/commons-links";
 import { estateDisplayTitle } from "@/lib/estate-display-name";
 import { conditionLabel, type PredicateId } from "@/lib/labels";
 import {
@@ -46,7 +47,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   if (merged) permanentRedirect(`/estates/${merged}`);
   const estate = await getEstate(slug);
   if (!estate) return { title: "Усадьба" };
-  const { title } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
+  const { title } = estateDisplayTitle(estate.name, estate.wikipediaTitle, estate.titleOverride);
   return { title };
 }
 
@@ -70,11 +71,17 @@ export default async function EstatePage({
   const editorialByField = new Map<string, (typeof editHistory)[number]>();
   for (const item of editHistory) {
     if (item.status !== "accepted" || !isEditorialSourceTitle(item.sourceTitle)) continue;
+    // Фото-правки живут в «истории карточки», в блок источников не дублируем.
+    if (item.predicate === "photo") continue;
     // Список уже отсортирован по убыванию даты — берём последнее по каждому полю.
     if (!editorialByField.has(item.predicate)) editorialByField.set(item.predicate, item);
   }
   const editorialEdits = [...editorialByField.values()];
-  const { title: displayName, registryNote } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
+  const { title: displayName, registryNote } = estateDisplayTitle(
+    estate.name,
+    estate.wikipediaTitle,
+    estate.titleOverride,
+  );
 
   const owners = estate.people.filter((person) => person.role !== "architect");
   const architects = estate.people.filter((person) => person.role === "architect");
@@ -85,6 +92,11 @@ export default async function EstatePage({
     estate.lat != null && estate.lng != null ? nearestAgglomeration(estate.lat, estate.lng) : null;
 
   const hasCoords = estate.lat != null && estate.lng != null;
+  // Категория Commons (или поиск по названию статьи) — не P180, он часто пустой.
+  const commonsUrl = await resolveCommonsGalleryUrl({
+    wikipediaTitle: estate.wikipediaTitle,
+    wikidataQid: estate.wikidataQid,
+  });
   const pastvuContext = {
     name: estate.name,
     wikipediaTitle: estate.wikipediaTitle,
@@ -181,9 +193,8 @@ export default async function EstatePage({
               photos={estate.photos}
               slug={estate.slug}
               editor={editor}
-              wikipediaTitle={estate.wikipediaTitle}
+              commonsUrl={commonsUrl}
               wikipediaUrl={estate.wikipediaUrl}
-              wikidataQid={estate.wikidataQid}
             />
           ) : pastvuHero ? (
             <PastVuHeroPlaceholder
@@ -194,9 +205,8 @@ export default async function EstatePage({
               estateName={displayName}
               slug={estate.slug}
               editor={editor}
-              wikipediaTitle={estate.wikipediaTitle}
+              commonsUrl={commonsUrl}
               wikipediaUrl={estate.wikipediaUrl}
-              wikidataQid={estate.wikidataQid}
             />
           ) : (
             <>
@@ -208,12 +218,27 @@ export default async function EstatePage({
                     ? "Рядом с объектом на PastVu тоже нет снимков в радиусе 250 м."
                     : "После проверки снимков из Commons здесь появится одно фото главного здания."}
               </p>
+              {editor ? (
+                <div className="photo-editor-bar" style={{ marginTop: "0.5rem" }}>
+                  <PhotoAddForm slug={estate.slug} role="main" label="+ главное фото" />
+                </div>
+              ) : null}
             </>
           )}
           <p className="kicker">
             {estate.objectType ?? "Объект"} · {estate.regionName}
           </p>
           <h1>{displayName}</h1>
+          {editor ? (
+            <p style={{ margin: "0.35rem 0 0" }}>
+              <InstantEdit
+                slug={estate.slug}
+                predicate="title"
+                currentValue={displayName}
+                label="сменить название"
+              />
+            </p>
+          ) : null}
           {estate.address ? <p className="muted">{estate.address}</p> : null}
           <p className="kicker" style={{ marginTop: "1.6rem" }}>
             Состав
@@ -236,8 +261,13 @@ export default async function EstatePage({
               ))}
             </ul>
           )}
-          {estate.ensemblePhotos && estate.ensemblePhotos.length > 0 ? (
-            <EnsemblePartsGallery photos={estate.ensemblePhotos} parts={estate.parts} />
+          {estate.ensemblePhotos.length > 0 || editor ? (
+            <EnsemblePartsGallery
+              photos={estate.ensemblePhotos}
+              parts={estate.parts}
+              slug={estate.slug}
+              editor={editor}
+            />
           ) : null}
           {hasCoords && pastvuForGallery.length > 0 ? (
             <PastVuGallery

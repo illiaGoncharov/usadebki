@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { restoreStatement, revokeStatement } from "@/app/actions";
 import { InstantEdit } from "@/components/InstantEdit";
+import { PhotoAddForm } from "@/components/PhotoGallery";
 import {
   formatWhen,
   isEditorialSourceTitle,
@@ -8,6 +9,11 @@ import {
   readableStatement,
 } from "@/lib/admin-history-format";
 import { isPredicateId } from "@/lib/labels";
+import {
+  isPhotoEditPredicate,
+  parsePhotoEditRecord,
+  photoEditActionLabel,
+} from "@/lib/photo-edit-log";
 
 export type AdminHistoryItem = {
   id: string;
@@ -26,6 +32,7 @@ export type AdminHistoryItem = {
 /**
  * Список утверждений для /admin/history и /admin/estates/[slug]/history.
  * Можно отменить, восстановить или сразу поправить значение.
+ * Для фото — превью, откат и подмена снимка с Commons.
  */
 export function AdminStatementHistoryList({
   items,
@@ -46,11 +53,16 @@ export function AdminStatementHistoryList({
       {items.map((item) => {
         const editorial = isEditorialSourceTitle(item.sourceTitle);
         const author = item.contributionAuthor ?? item.sourceAuthor ?? "Редактор";
+        const photoEdit = isPhotoEditPredicate(item.predicate) ? parsePhotoEditRecord(item.text) : null;
+
         return (
           <article key={item.id} className="queue">
             <p className="kicker">
               {predicateLabel(item.predicate)} · <StatusBadge status={item.status} />
               {editorial ? <span className="muted"> · редактор</span> : null}
+              {photoEdit ? (
+                <span className="muted"> · {photoEditActionLabel(photoEdit.action)}</span>
+              ) : null}
             </p>
             {showEstateLink ? (
               <h2>
@@ -63,9 +75,41 @@ export function AdminStatementHistoryList({
                 </Link>
               </h2>
             ) : null}
-            <p style={{ textDecoration: item.status === "revoked" ? "line-through" : undefined }}>
-              {readableStatement(item.predicate, item.text)}
-            </p>
+
+            {photoEdit ? (
+              <div className="history-photo">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img className="history-photo__thumb" src={photoEdit.url} alt="" />
+                <div>
+                  <p style={{ textDecoration: item.status === "revoked" ? "line-through" : undefined }}>
+                    {readableStatement(item.predicate, item.text)}
+                  </p>
+                  {photoEdit.prev.primaryUrl &&
+                  (photoEdit.action === "primary" || photoEdit.action === "add_main") ? (
+                    <p className="muted" style={{ fontSize: "0.88rem", marginTop: "0.35rem" }}>
+                      Было главным: другой снимок
+                      {photoEdit.prev.primaryId !== photoEdit.photoId ? (
+                        <>
+                          {" · "}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            className="history-photo__prev"
+                            src={photoEdit.prev.primaryUrl}
+                            alt=""
+                            title="Предыдущее главное фото"
+                          />
+                        </>
+                      ) : null}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
+              <p style={{ textDecoration: item.status === "revoked" ? "line-through" : undefined }}>
+                {readableStatement(item.predicate, item.text)}
+              </p>
+            )}
+
             <p className="muted">
               {author} · {formatWhen(item.createdAt)}
             </p>
@@ -111,6 +155,22 @@ export function AdminStatementHistoryList({
                   predicate={item.predicate}
                   currentValue={item.text}
                   label="править текст"
+                  returnTo={returnTo}
+                />
+              </div>
+            ) : null}
+            {item.status === "accepted" && photoEdit ? (
+              <div className="photo-editor-bar" style={{ marginTop: "0.55rem" }}>
+                <PhotoAddForm
+                  slug={item.estateSlug}
+                  role={
+                    photoEdit.action === "add_ensemble" ||
+                    photoEdit.action === "ensemble" ||
+                    photoEdit.action === "fill_ensemble"
+                      ? "ensemble"
+                      : "main"
+                  }
+                  label="+ другой снимок"
                   returnTo={returnTo}
                 />
               </div>

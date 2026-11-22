@@ -1,6 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import {
+  addEstatePhoto,
+  setEnsembleEstatePhoto,
+  setPrimaryEstatePhoto,
+} from "@/app/actions";
 import { PhotoMissControl } from "@/components/PhotoMissControl";
 import { PhotoRelatedLinks } from "@/components/PhotoRelatedLinks";
 
@@ -10,6 +15,7 @@ type Shot = {
   author: string | null;
   license: string | null;
   sourceUrl: string | null;
+  isPrimary?: boolean;
 };
 
 export function PhotoGallery({
@@ -17,23 +23,22 @@ export function PhotoGallery({
   photos,
   slug,
   editor = false,
-  wikipediaTitle,
+  commonsUrl,
   wikipediaUrl,
-  wikidataQid,
 }: {
   name: string;
   photos: Shot[];
   slug: string;
   editor?: boolean;
-  wikipediaTitle?: string | null;
+  commonsUrl?: string | null;
   wikipediaUrl?: string | null;
-  wikidataQid?: string | null;
 }) {
   const [index, setIndex] = useState(0);
   const [touchX, setTouchX] = useState<number | null>(null);
   const photo = photos[index] ?? photos[0];
   if (!photo) return null;
   const total = photos.length;
+  const isPrimary = Boolean(photo.isPrimary) || (index === 0 && photos.every((item) => !item.isPrimary));
 
   function step(delta: number) {
     setIndex((current) => (current + delta + total) % total);
@@ -92,11 +97,80 @@ export function PhotoGallery({
           </>
         ) : null}
       </figcaption>
-      <PhotoRelatedLinks
-        wikipediaTitle={wikipediaTitle}
-        wikipediaUrl={wikipediaUrl}
-        wikidataQid={wikidataQid}
-      />
+      <PhotoRelatedLinks commonsUrl={commonsUrl} wikipediaUrl={wikipediaUrl} />
+      {editor ? (
+        <div className="photo-editor-bar">
+          {isPrimary ? (
+            <span className="muted">главное</span>
+          ) : (
+            <form action={setPrimaryEstatePhoto}>
+              <input type="hidden" name="id" value={photo.id} />
+              <input type="hidden" name="slug" value={slug} />
+              <button type="submit" className="photo-edit-link" title="Сделать главным фото карточки">
+                главное
+              </button>
+            </form>
+          )}
+          <span className="photo-editor-bar__sep" aria-hidden>
+            ·
+          </span>
+          <form action={setEnsembleEstatePhoto}>
+            <input type="hidden" name="id" value={photo.id} />
+            <input type="hidden" name="slug" value={slug} />
+            <button type="submit" className="photo-edit-link" title="В блок частей ансамбля">
+              в ансамбль
+            </button>
+          </form>
+          <span className="photo-editor-bar__sep" aria-hidden>
+            ·
+          </span>
+          <PhotoAddForm slug={slug} role="main" label="+ фото" />
+        </div>
+      ) : null}
     </figure>
+  );
+}
+
+/** Компактная форма: Commons File:… или любая https-ссылка на кадр. */
+export function PhotoAddForm({
+  slug,
+  role,
+  label,
+  returnTo,
+}: {
+  slug: string;
+  role: "main" | "ensemble";
+  label: string;
+  /** После добавления вернуться сюда (например в историю карточки). */
+  returnTo?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button type="button" className="photo-edit-link" onClick={() => setOpen(true)}>
+        {label}
+      </button>
+    );
+  }
+
+  return (
+    <form action={addEstatePhoto} className="photo-add-form">
+      <input type="hidden" name="slug" value={slug} />
+      <input type="hidden" name="role" value={role} />
+      {returnTo ? <input type="hidden" name="returnTo" value={returnTo} /> : null}
+      <input
+        name="photoUrl"
+        className="field"
+        required
+        placeholder="https://… (Commons, PastVu или прямой URL)"
+        autoFocus
+      />
+      <button type="submit" className="photo-edit-link">
+        ок
+      </button>
+      <button type="button" className="photo-edit-link" style={{ color: "var(--muted)" }} onClick={() => setOpen(false)}>
+        отмена
+      </button>
+    </form>
   );
 }

@@ -39,6 +39,7 @@ export const CONDITION_PICK_HINT =
   "Если здание и восстановлено, и занято — берите «восстановлена и используется». «Используется» — когда занято, но без полной реставрации; «восстановлена» — приведена в порядок, но пустует.";
 
 export const PREDICATES = [
+  { id: "title", label: "название" },
   { id: "condition", label: "состояние" },
   { id: "owners", label: "владельцы до 1917" },
   { id: "architects", label: "архитектор(ы)" },
@@ -61,6 +62,7 @@ export function conditionLabel(id: string | null | undefined) {
 }
 
 export function predicateLabel(id: string) {
+  if (id === "photo") return "фото";
   return PREDICATES.find((item) => item.id === id)?.label ?? id;
 }
 

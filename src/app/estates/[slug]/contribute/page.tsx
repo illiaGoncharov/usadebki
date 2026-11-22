@@ -22,7 +22,7 @@ export default async function ContributePage({
   const formError = errorRaw?.trim() || null;
   const estate = await getEstate(slug);
   if (!estate) notFound();
-  const { title: displayName } = estateDisplayTitle(estate.name, estate.wikipediaTitle);
+  const { title: displayName } = estateDisplayTitle(estate.name, estate.wikipediaTitle, estate.titleOverride);
   const predicate: PredicateId = field && isPredicateId(field) ? field : "owners";
   const editor = await isAdmin();
 

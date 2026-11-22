@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { PHOTO_KIND_SQL, photoFileKey, photoKind, photoRank, pickHeroPhoto } from "@/lib/photo";
+import { PHOTO_KIND_SQL, photoFileKey, photoKind, photoRank, sortGalleryPhotos } from "@/lib/photo";
 import { AGGLOMERATIONS, isStyleId } from "@/lib/reference";
 import { placeFromAddress } from "@/lib/search";
 import { db, sql as pg } from "./index";
@@ -464,7 +464,8 @@ export async function getEstate(slug: string) {
     const existing = deduped.get(key);
     if (!existing || (!existing.isPrimary && row.isPrimary)) deduped.set(key, row);
   }
-  const galleryPhotos = pickHeroPhoto([...deduped.values()]);
+  // На карточке — все снимки главного здания (редактор листает и меняет главное).
+  const galleryPhotos = sortGalleryPhotos([...deduped.values()]);
 
   const registryDuplicates = aliasRows.map((row) => row.reg).filter((reg) => reg !== estate.egrknRegNumber);
   const registryNumbers = [estate.egrknRegNumber, ...registryDuplicates];
@@ -536,6 +537,8 @@ export async function getEstate(slug: string) {
           : [],
     // Правка «история» перекрывает summary из Википедии / паспорта.
     history: statementRows.find((row) => row.predicate === "history")?.text ?? null,
+    // Моментальное название редактора — перекрывает автозаголовок из паспорта / вики.
+    titleOverride: statementRows.find((row) => row.predicate === "title")?.text ?? null,
     yearNotes,
     notes,
     sources: [...sourceMap.values()],

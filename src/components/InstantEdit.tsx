@@ -115,8 +115,15 @@ export function InstantEdit({
           name="text"
           className="field"
           required
-          placeholder={predicate === "year" ? "Например: 1790-е гг." : "Короткая справка"}
+          placeholder={
+            predicate === "year"
+              ? "Например: 1790-е гг."
+              : predicate === "title"
+                ? "Короткое название на карточке"
+                : "Короткая справка"
+          }
           defaultValue={currentValue ?? ""}
+          maxLength={predicate === "title" ? 160 : undefined}
           style={{ margin: "0 0 0.4rem" }}
         />
       )}
