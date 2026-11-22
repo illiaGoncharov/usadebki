@@ -46,8 +46,9 @@ export function ownerTimeHints(text: string): OwnerTimeHints {
   const preRevEnd = preRev.length > 0 ? preRev[preRev.length - 1]! : null;
   const mentionsRevolution = /до\s+революц|перед\s+революц|накануне\s+революц|к\s+1917/i.test(text);
   const sovietHeavy =
-    /советск|кинотеатр|ресторан|после\s+революц|в\s+191[8-9]|192\d/i.test(text) &&
-    (preRevEnd == null || end == null || end > REVOLUTION_YEAR);
+    /советск|кинотеатр|ресторан|национализ|после\s+революц|в\s+191[8-9]|с\s+191[8-9]|192\d|196\d/i.test(
+      text,
+    ) && (preRevEnd == null || end == null || end > REVOLUTION_YEAR);
 
   return { years, start, end, preRevEnd, mentionsRevolution, sovietHeavy };
 }
@@ -72,12 +73,41 @@ export function lastPreRevolutionScore(owner: OwnerLike): number {
   return score;
 }
 
+/**
+ * Послереволюционная судьба (с 1918, национализация…) — не «владелец до 1917»,
+ * всегда в конце списка.
+ */
+export function isPostRevolutionOwner(owner: OwnerLike): boolean {
+  const text = blobOf(owner).trim();
+  const hints = ownerTimeHints(text);
+  if (hints.sovietHeavy) return true;
+  if (hints.start != null && hints.start >= REVOLUTION_YEAR + 1) return true;
+  if (hints.years.length > 0 && hints.preRevEnd == null) return true;
+  return /^с\s+191[89]|^в\s+191[89]|^после\s+революц/i.test(text);
+}
+
+export function partitionOwnersByRevolution<T extends OwnerLike>(owners: T[]) {
+  const preRev: T[] = [];
+  const postRev: T[] = [];
+  for (const owner of owners) {
+    if (isPostRevolutionOwner(owner)) postRev.push(owner);
+    else preRev.push(owner);
+  }
+  return {
+    preRev,
+    postRev: sortOwnersChronologically(postRev),
+  };
+}
+
 /** Кто из списка — последний владелец до 1917 (по датам в тексте). */
 export function pickLastPreRevolutionOwner<T extends OwnerLike>(owners: T[]): T {
   if (owners.length === 0) throw new Error("owners пуст");
-  if (owners.length === 1) return owners[0]!;
+  const { preRev } = partitionOwnersByRevolution(owners);
+  const pool = preRev.length > 0 ? preRev : owners.filter((o) => !isPostRevolutionOwner(o));
+  if (pool.length === 0) throw new Error("нет владельцев до 1917");
+  if (pool.length === 1) return pool[0]!;
 
-  const ranked = owners
+  const ranked = pool
     .map((owner) => ({
       owner,
       score: lastPreRevolutionScore(owner),
@@ -88,10 +118,9 @@ export function pickLastPreRevolutionOwner<T extends OwnerLike>(owners: T[]): T 
   const withDates = ranked.find((row) => row.score >= 0);
   if (withDates) return withDates.owner;
 
-  // Нет дат — берём единственную ручную метку или первый элемент.
-  const marked = owners.filter((owner) => owner.role === "last_owner");
+  const marked = pool.filter((owner) => owner.role === "last_owner");
   if (marked.length === 1) return marked[0]!;
-  return owners[0]!;
+  return pool[0]!;
 }
 
 /** Хронология: от ранних владельцев к поздним. */

@@ -40,6 +40,7 @@ export const CONDITION_PICK_HINT =
 
 export const PREDICATES = [
   { id: "title", label: "название" },
+  { id: "composition", label: "состав ансамбля" },
   { id: "condition", label: "состояние" },
   { id: "owners", label: "владельцы до 1917" },
   { id: "architects", label: "архитектор(ы)" },

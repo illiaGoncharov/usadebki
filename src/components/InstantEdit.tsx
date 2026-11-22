@@ -44,7 +44,8 @@ export function InstantEdit({
     predicate === "history" ||
     predicate === "note" ||
     predicate === "owners" ||
-    predicate === "architects";
+    predicate === "architects" ||
+    predicate === "composition";
 
   return (
     <form
@@ -91,12 +92,14 @@ export function InstantEdit({
             placeholder={
               predicate === "owners" || predicate === "architects"
                 ? "Каждое имя с новой строки"
-                : predicate === "history"
-                  ? "Текст истории усадьбы"
-                  : "Короткая заметка"
+                : predicate === "composition"
+                  ? "Каждая часть ансамбля с новой строки (флигель, церковь…)"
+                  : predicate === "history"
+                    ? "Текст истории усадьбы"
+                    : "Короткая заметка"
             }
             defaultValue={currentValue ?? ""}
-            minRows={predicate === "history" ? 12 : 8}
+            minRows={predicate === "history" ? 12 : predicate === "composition" ? 6 : 8}
           />
           {predicate === "owners" ? (
             <label

@@ -5,6 +5,7 @@ import { removeEstatePerson, setEstatePersonAsLastOwner } from "@/app/actions";
 import { AdminRemoveButton } from "@/components/AdminRemoveButton";
 import { InstantEdit } from "@/components/InstantEdit";
 import {
+  partitionOwnersByRevolution,
   pickLastPreRevolutionOwner,
   sortOwnersChronologically,
 } from "@/lib/owner-chronology";
@@ -19,6 +20,7 @@ export type OwnerRow = {
 /**
  * Владельцы: сверху последний до 1917 (по датам в тексте),
  * остальные — по хронологии за «ранее».
+ * С 1918 / советская судьба — отдельным блоком в самом конце.
  */
 export function OwnersList({
   owners,
@@ -30,35 +32,51 @@ export function OwnersList({
   editor?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [postExpanded, setPostExpanded] = useState(false);
 
-  const { primary, earlier, lastIsGuessed } = useMemo(() => {
+  const { primary, earlier, lastIsGuessed, postRevolution } = useMemo(() => {
     if (owners.length === 0) {
-      return { primary: null as OwnerRow | null, earlier: [] as OwnerRow[], lastIsGuessed: false };
+      return {
+        primary: null as OwnerRow | null,
+        earlier: [] as OwnerRow[],
+        lastIsGuessed: false,
+        postRevolution: [] as OwnerRow[],
+      };
     }
 
-    const chronological = sortOwnersChronologically(owners);
-    const last = pickLastPreRevolutionOwner(owners);
-    const rest = chronological.filter((person) => person.id !== last.id);
+    const { preRev, postRev } = partitionOwnersByRevolution(owners);
+    if (preRev.length === 0) {
+      return {
+        primary: null,
+        earlier: [],
+        lastIsGuessed: false,
+        postRevolution: postRev,
+      };
+    }
 
-    // Метка «последний» показываем всегда у выбранного алгоритмом (или вручную совпавшего).
+    const chronological = sortOwnersChronologically(preRev);
+    const last = pickLastPreRevolutionOwner(preRev);
+    const rest = chronological.filter((person) => person.id !== last.id);
     const lastIsGuessed = last.role !== "last_owner";
 
-    return { primary: last, earlier: rest, lastIsGuessed };
+    return { primary: last, earlier: rest, lastIsGuessed, postRevolution: postRev };
   }, [owners]);
 
-  if (!primary) return null;
+  if (!primary && postRevolution.length === 0) return null;
 
   return (
     <div className="owners-list">
-      <OwnerLine
-        person={primary}
-        slug={slug}
-        editor={editor}
-        isPrimary
-        showLastBadge
-        lastHint={lastIsGuessed ? "по датам" : undefined}
-        canMarkLast={false}
-      />
+      {primary ? (
+        <OwnerLine
+          person={primary}
+          slug={slug}
+          editor={editor}
+          isPrimary
+          showLastBadge
+          lastHint={lastIsGuessed ? "по датам" : undefined}
+          canMarkLast={false}
+        />
+      ) : null}
 
       {earlier.length > 0 ? (
         <p style={{ margin: "0.35rem 0 0" }}>
@@ -93,6 +111,41 @@ export function OwnersList({
           ))
         : null}
 
+      {postRevolution.length > 0 ? (
+        <>
+          <p style={{ margin: primary || earlier.length > 0 ? "0.85rem 0 0" : "0" }}>
+            <button
+              type="button"
+              className="text-button"
+              style={{
+                fontSize: "0.85em",
+                textTransform: "none",
+                letterSpacing: "normal",
+                color: "var(--muted)",
+              }}
+              onClick={() => setPostExpanded((value) => !value)}
+              aria-expanded={postExpanded}
+            >
+              {postExpanded ? "свернуть" : `после 1917 (${postRevolution.length})`}
+            </button>
+          </p>
+          {postExpanded
+            ? postRevolution.map((person) => (
+                <OwnerLine
+                  key={person.id}
+                  person={person}
+                  slug={slug}
+                  editor={editor}
+                  isPrimary={false}
+                  showLastBadge={false}
+                  canMarkLast={false}
+                  variant="post"
+                />
+              ))
+            : null}
+        </>
+      ) : null}
+
       {editor ? (
         <p style={{ margin: "0.45rem 0 0" }}>
           <InstantEdit slug={slug} predicate="owners" label="моментально добавить" />
@@ -110,6 +163,7 @@ function OwnerLine({
   showLastBadge,
   lastHint,
   canMarkLast,
+  variant = "pre",
 }: {
   person: OwnerRow;
   slug: string;
@@ -118,54 +172,41 @@ function OwnerLine({
   showLastBadge: boolean;
   lastHint?: string;
   canMarkLast: boolean;
+  variant?: "pre" | "post";
 }) {
   return (
-    <p
-      className="owners-list__row"
+    <div
+      className={`owners-list__row${variant === "post" ? " owners-list__row--post" : ""}`}
       style={{
         margin: isPrimary ? "0" : "0.45rem 0 0",
         fontSize: isPrimary ? undefined : "0.95em",
       }}
     >
-      <span>{person.name}</span>
-      {person.years ? <span className="muted"> · {person.years}</span> : null}
-      {showLastBadge ? (
-        <span className="muted">
-          {" "}
-          · последний до 1917
-          {lastHint ? ` (${lastHint})` : ""}
-        </span>
-      ) : null}
+      <p className="owners-list__text" style={{ margin: 0 }}>
+        <span>{person.name}</span>
+        {person.years ? <span className="muted"> · {person.years}</span> : null}
+        {showLastBadge ? (
+          <span className="muted">
+            {" "}
+            · последний до 1917
+            {lastHint ? ` (${lastHint})` : ""}
+          </span>
+        ) : null}
+      </p>
       {editor ? (
-        <>
-          {" "}
+        <div className="owners-list__tools">
           {canMarkLast ? (
-            <form action={setEstatePersonAsLastOwner} style={{ display: "inline" }}>
+            <form action={setEstatePersonAsLastOwner} className="owners-list__tool">
               <input type="hidden" name="id" value={person.id} />
               <input type="hidden" name="slug" value={slug} />
-              <button
-                type="submit"
-                className="text-button"
-                style={{
-                  fontSize: "0.85em",
-                  textTransform: "none",
-                  letterSpacing: "normal",
-                  color: "var(--muted)",
-                }}
-                title="Отметить как последнего владельца до 1917"
-              >
+              <button type="submit" className="photo-edit-link" title="Отметить как последнего владельца до 1917">
                 сделать последним
               </button>
             </form>
           ) : null}
-          <AdminRemoveButton
-            action={removeEstatePerson}
-            id={person.id}
-            slug={slug}
-            label={`Убрать ${person.name}`}
-          />
-        </>
+          <AdminRemoveButton action={removeEstatePerson} id={person.id} slug={slug} label={`Убрать ${person.name}`} />
+        </div>
       ) : null}
-    </p>
+    </div>
   );
 }

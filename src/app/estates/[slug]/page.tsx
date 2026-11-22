@@ -243,15 +243,7 @@ export default async function EstatePage({
           <p className="kicker" style={{ marginTop: "1.6rem" }}>
             Состав
           </p>
-          {estate.parts.length === 0 ? (
-            <p className="muted">
-              {estate.objectType === "Ансамбль"
-                ? estate.registryDuplicates.length > 0
-                  ? "Отдельные строения в состав ансамбля в базе пока не привязаны. В ЕГРОКН на один объект заведено несколько паспортов — они перечислены справа, это не список зданий."
-                  : "В реестре ансамбль пока не разложен на отдельные объекты."
-                : "В реестре это отдельный объект, не ансамбль."}
-            </p>
-          ) : (
+          {estate.parts.length > 0 ? (
             <ul className="parts">
               {estate.parts.map((part) => (
                 <li key={part.id}>
@@ -260,7 +252,42 @@ export default async function EstatePage({
                 </li>
               ))}
             </ul>
+          ) : estate.composition ? (
+            <ul className="parts">
+              {estate.composition
+                .split(/\n+/)
+                .map((line) => line.trim())
+                .filter(Boolean)
+                .map((line) => (
+                  <li key={line}>
+                    <span>{line}</span>
+                  </li>
+                ))}
+            </ul>
+          ) : (
+            <p className="muted">
+              {estate.objectType === "Ансамбль"
+                ? estate.registryDuplicates.length > 0
+                  ? "Отдельные строения в состав ансамбля в базе пока не привязаны. В ЕГРОКН на один объект заведено несколько паспортов — они перечислены справа, это не список зданий."
+                  : "В реестре ансамбль пока не разложен на отдельные объекты."
+                : "В реестре это отдельный объект, не ансамбль."}
+            </p>
           )}
+          {editor ? (
+            <p style={{ margin: "0.35rem 0 0" }}>
+              <InstantEdit
+                slug={estate.slug}
+                predicate="composition"
+                currentValue={estate.composition ?? ""}
+                label={estate.parts.length > 0 ? "добавить пояснение" : "уточнить состав"}
+              />
+            </p>
+          ) : null}
+          {estate.parts.length > 0 && estate.composition ? (
+            <p className="muted" style={{ marginTop: "0.45rem", fontSize: "0.9rem", whiteSpace: "pre-wrap" }}>
+              {estate.composition}
+            </p>
+          ) : null}
           {estate.ensemblePhotos.length > 0 || editor ? (
             <EnsemblePartsGallery
               photos={estate.ensemblePhotos}

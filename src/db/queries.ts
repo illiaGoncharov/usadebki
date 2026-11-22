@@ -539,6 +539,8 @@ export async function getEstate(slug: string) {
     history: statementRows.find((row) => row.predicate === "history")?.text ?? null,
     // Моментальное название редактора — перекрывает автозаголовок из паспорта / вики.
     titleOverride: statementRows.find((row) => row.predicate === "title")?.text ?? null,
+  /** Ручной состав, если в реестре части не привязаны. */
+    composition: statementRows.find((row) => row.predicate === "composition")?.text ?? null,
     yearNotes,
     notes,
     sources: [...sourceMap.values()],

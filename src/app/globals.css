@@ -282,6 +282,31 @@ h2 { font-size: 1.35rem; }
   vertical-align: baseline;
 }
 
+.owners-list__row {
+  display: block;
+}
+
+.owners-list__text {
+  line-height: 1.45;
+}
+
+.owners-list__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.owners-list__tool {
+  display: inline;
+  margin: 0;
+}
+
+.owners-list__row--post .owners-list__text {
+  font-size: 0.95em;
+}
+
 .admin-remove:hover,
 .admin-remove:focus-visible {
   color: var(--ink);
